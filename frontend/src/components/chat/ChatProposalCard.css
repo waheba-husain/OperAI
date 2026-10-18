@@ -1,0 +1,118 @@
+/* ============================================================
+   OperAI Design System — ChatProposalCard.css
+   Conversational Proposal & Confirmation Card Styles
+   ============================================================ */
+
+.chat-proposal-card {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.chat-proposal-card--simulated {
+  border-color: var(--color-warning);
+  background: var(--color-warning-bg);
+}
+
+.chat-proposal-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.chat-proposal-card__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-sm);
+  color: var(--color-primary);
+}
+
+.chat-proposal-card--simulated .chat-proposal-card__title {
+  color: var(--color-warning);
+}
+
+.chat-proposal-card__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  background: var(--color-primary-hover);
+  color: var(--color-text-on-primary);
+}
+
+.chat-proposal-card__badge--simulated {
+  background: var(--color-warning);
+  color: #FFFFFF;
+}
+
+.chat-proposal-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+}
+
+.chat-proposal-card__meta-item {
+  background: var(--color-surface);
+  padding: 0.125rem 0.375rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.chat-proposal-card__phrases-label {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-secondary);
+  margin-top: var(--space-1);
+}
+
+.chat-proposal-card__phrases {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.chat-proposal-card__phrase-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.625rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--color-primary);
+  font-weight: var(--weight-medium);
+}
+
+.chat-proposal-card__disclaimer {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px dashed var(--color-border);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  line-height: var(--leading-normal);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.chat-proposal-card__disclaimer-icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
