@@ -14,6 +14,8 @@ import type {
   ActionRejectRequestDTO,
   ActionRejectResponseDTO,
   ActionStatusDTO,
+  AgentChatRequestDTO,
+  AgentChatResponseDTO,
   AuditEventTypeDTO,
   AuditListResponseDTO,
   AuditUndoResponseDTO,
@@ -28,6 +30,7 @@ import type {
   RecoveryProposeResponseDTO
 } from '../types/dto.ts'
 import { apiClient as defaultClient, ApiClient } from './client.ts'
+import { ApiError } from './errors.ts'
 
 /* ── 1. Orders (Rest_API_Spec.md §3.5) ─────────────────────── */
 
@@ -228,4 +231,52 @@ export async function proposeRecovery(
 ): Promise<RecoveryProposeResponseDTO> {
   const client = options?.client ?? defaultClient
   return client.post<RecoveryProposeResponseDTO>('/api/recovery/propose', data, { signal: options?.signal })
+}
+
+/* ── 10. AI Assistant Chat (Rest_API_Spec.md §3.16) ────────── */
+
+/**
+ * Send conversational voice/text message to the AI assistant (Rest_API_Spec.md §3.16).
+ * Bedrock picks one read-or-propose tool and formats spoken reply using backend figures only.
+ * CRITICAL SAFETY (AGENTS.md Rule 2):
+ * This endpoint is read-or-propose only. It NEVER approves, rejects, or executes actions.
+ * Approving proposals occurs strictly through approveAction().
+ */
+export async function chatAgent(
+  data: AgentChatRequestDTO,
+  options?: { signal?: AbortSignal; client?: ApiClient }
+): Promise<AgentChatResponseDTO> {
+  // Validate message length without silently altering or trimming user input (Rest_API_Spec.md §3.16)
+  if (!data || typeof data.message !== 'string' || data.message.length === 0 || data.message.trim().length === 0) {
+    throw new ApiError(422, {
+      code: 'VALIDATION_ERROR',
+      message: 'Message is required and must not be empty.',
+      details: { field: 'message', length: typeof data?.message === 'string' ? data.message.length : 0 }
+    })
+  }
+
+  if (data.message.length > 500) {
+    throw new ApiError(422, {
+      code: 'VALIDATION_ERROR',
+      message: `Message exceeds maximum allowed length of 500 characters (received ${data.message.length}).`,
+      details: { field: 'message', length: data.message.length }
+    })
+  }
+
+  // Validate input_mode accepts only documented values ('voice' | 'text') when provided
+  if (data.input_mode !== undefined && data.input_mode !== 'voice' && data.input_mode !== 'text') {
+    throw new ApiError(422, {
+      code: 'VALIDATION_ERROR',
+      message: `Invalid input_mode "${String(data.input_mode)}". Must be 'voice' or 'text'.`,
+      details: { field: 'input_mode', value: data.input_mode }
+    })
+  }
+
+  const client = options?.client ?? defaultClient
+  const payload: AgentChatRequestDTO = {
+    message: data.message,
+    ...(data.input_mode ? { input_mode: data.input_mode } : {})
+  }
+
+  return client.post<AgentChatResponseDTO>('/api/agent/chat', payload, { signal: options?.signal })
 }

@@ -22,6 +22,9 @@ const ICON_MOON =
 const ICON_USER =
   'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z'
 
+const ICON_CHAT =
+  'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'
+
 /* ── Breadcrumb label by section ───────────────────────────── */
 const BREADCRUMBS: Record<PageId, string> = {
   'overview':          'Dashboard',
@@ -39,6 +42,9 @@ interface TopNavProps {
   theme:          Theme
   onToggleTheme:  () => void
   onMenuOpen:     () => void
+  isChatOpen?:    boolean
+  onToggleChat?:  () => void
+  chatButtonRef?: React.RefObject<HTMLButtonElement | null>
 }
 
 export function TopNav({
@@ -47,6 +53,9 @@ export function TopNav({
   theme,
   onToggleTheme,
   onMenuOpen,
+  isChatOpen = false,
+  onToggleChat,
+  chatButtonRef
 }: TopNavProps) {
   const breadcrumb = BREADCRUMBS[currentPage]
 
@@ -88,6 +97,21 @@ export function TopNav({
           <span className="topnav__status-dot" aria-hidden="true" />
           <span className="topnav__status-text">Kitchen Online</span>
         </div>
+
+        {/* AI Assistant Chat toggle button */}
+        <button
+          ref={chatButtonRef}
+          id="topnav-chat-btn"
+          type="button"
+          className={`topnav__icon-btn ${isChatOpen ? 'topnav__icon-btn--active' : ''}`}
+          aria-label={isChatOpen ? 'Close AI assistant' : 'Open AI assistant'}
+          title={isChatOpen ? 'Close AI assistant' : 'Open AI assistant'}
+          aria-expanded={isChatOpen}
+          aria-controls="chat-drawer"
+          onClick={onToggleChat}
+        >
+          <NavIcon path={ICON_CHAT} size={17} />
+        </button>
 
         {/* Theme toggle */}
         <button

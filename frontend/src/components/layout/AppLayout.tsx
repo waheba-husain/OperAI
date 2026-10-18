@@ -6,10 +6,13 @@
    Theme is received from App.tsx via props (single source).
    ============================================================ */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { NAV_ITEMS } from '../../types/navigation'
 import type { PageId } from '../../types/navigation'
 import type { Theme } from '../../hooks/useTheme'
+import { useChatData } from '../../hooks/useChatData'
+import { useVoice } from '../../hooks/useVoice'
+import { ChatDrawer } from '../chat'
 import { Sidebar } from './Sidebar'
 import { TopNav } from './TopNav'
 import { PlaceholderPage } from '../../pages/PlaceholderPage'
@@ -28,6 +31,12 @@ interface AppLayoutProps {
 export function AppLayout({ theme, toggleTheme }: AppLayoutProps) {
   const [currentPage, setCurrentPage] = useState<PageId>('overview')
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [isChatOpen, setIsChatOpen] = useState(false)
+  const chatButtonRef = useRef<HTMLButtonElement | null>(null)
+
+  // Single-source chat and voice state held at layout root
+  const chatData = useChatData()
+  const voice = useVoice()
 
   /* Derive the active NavItem for the TopNav title */
   const activeItem =
@@ -36,6 +45,27 @@ export function AppLayout({ theme, toggleTheme }: AppLayoutProps) {
   const handleNavigate = (page: PageId) => {
     setCurrentPage(page)
     setSidebarOpen(false)  /* close drawer after mobile navigation */
+  }
+
+  const handleToggleChat = () => {
+    setIsChatOpen(prev => {
+      const next = !prev
+      if (!next) {
+        if (voice.isListening) voice.stopListening()
+        if (voice.isSpeaking) voice.stopSpeaking()
+      }
+      return next
+    })
+  }
+
+  const handleCloseChat = () => {
+    if (voice.isListening) {
+      voice.stopListening()
+    }
+    if (voice.isSpeaking) {
+      voice.stopSpeaking()
+    }
+    setIsChatOpen(false)
   }
 
   /* Close sidebar when viewport grows to desktop width */
@@ -75,6 +105,9 @@ export function AppLayout({ theme, toggleTheme }: AppLayoutProps) {
           theme={theme}
           onToggleTheme={toggleTheme}
           onMenuOpen={() => setSidebarOpen(true)}
+          isChatOpen={isChatOpen}
+          onToggleChat={handleToggleChat}
+          chatButtonRef={chatButtonRef}
         />
 
         <main
@@ -98,6 +131,15 @@ export function AppLayout({ theme, toggleTheme }: AppLayoutProps) {
           )}
         </main>
       </div>
+
+      {/* ── AI Chat Assistant Drawer ─────────────────────── */}
+      <ChatDrawer
+        isOpen={isChatOpen}
+        onClose={handleCloseChat}
+        chatData={chatData}
+        voice={voice}
+        triggerRef={chatButtonRef}
+      />
     </div>
   )
 }
