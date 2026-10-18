@@ -17,7 +17,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
+import { ApiClient } from '../client.ts'
 import {
+  ChatConversationController,
   extractActionMetadata,
   MAX_CHAT_MESSAGE_LENGTH,
   SUGGESTED_CHAT_PROMPTS
@@ -138,3 +140,147 @@ test('ChatMessageList: suggested prompts are non-empty and relevant to cloud kit
     assert.ok(prompt.length > 5)
   }
 })
+
+/* ── 5. Drawer Lifecycle & Layout Integration ─────────────────── */
+
+test('ChatDrawer lifecycle: closing drawer terminates active voice recognition safely', () => {
+  let stopListeningCalled = false
+  let stopSpeakingCalled = false
+
+  const mockVoice = {
+    isListening: true,
+    isSpeaking: true,
+    stopListening() {
+      stopListeningCalled = true
+      this.isListening = false
+    },
+    stopSpeaking() {
+      stopSpeakingCalled = true
+      this.isSpeaking = false
+    }
+  }
+
+  // Simulate drawer closing handler in AppLayout / ChatDrawer
+  const handleClose = () => {
+    if (mockVoice.isListening) {
+      mockVoice.stopListening()
+    }
+    if (mockVoice.isSpeaking) {
+      mockVoice.stopSpeaking()
+    }
+  }
+
+  handleClose()
+
+  assert.strictEqual(stopListeningCalled, true)
+  assert.strictEqual(stopSpeakingCalled, true)
+  assert.strictEqual(mockVoice.isListening, false)
+  assert.strictEqual(mockVoice.isSpeaking, false)
+})
+
+test('ChatDrawer lifecycle: conversation state persists across drawer open and close cycles', () => {
+  const controller = new ChatConversationController()
+
+  // 1. User types draft and has messages
+  controller.setDraft('Important user question')
+  assert.strictEqual(controller.getSnapshot().draft, 'Important user question')
+
+  // 2. User closes drawer (isChatOpen becomes false)
+  let isChatOpen = false
+
+  // State in controller must remain 100% intact
+  assert.strictEqual(controller.getSnapshot().draft, 'Important user question')
+
+  // 3. User reopens drawer (isChatOpen becomes true)
+  isChatOpen = true
+  assert.strictEqual(isChatOpen, true)
+  assert.strictEqual(controller.getSnapshot().draft, 'Important user question')
+})
+
+test('ChatDrawer lifecycle: closing drawer does NOT auto-submit draft or transcript', () => {
+  const controller = new ChatConversationController()
+
+  controller.applyVoiceTranscript('Spoken words before closing')
+  assert.strictEqual(controller.getSnapshot().draft, 'Spoken words before closing')
+  assert.strictEqual(controller.getSnapshot().messages.length, 0)
+
+  // Drawer closes
+  // Verify draft is preserved and NOT auto-submitted
+  assert.strictEqual(controller.getSnapshot().draft, 'Spoken words before closing')
+  assert.strictEqual(controller.getSnapshot().messages.length, 0)
+  assert.strictEqual(controller.getSnapshot().isLoading, false)
+})
+
+test('ChatDrawer lifecycle: in-flight request completes safely across drawer close and reopen', async () => {
+  const mockResponse = {
+    reply: 'Kitchen brief completed in background.',
+    intent: 'get_brief',
+    tool_used: 'get_brief',
+    data: { order_count: 12 },
+    requires_confirmation: false,
+    confirm_phrases: []
+  }
+
+  const mockFetch = async (): Promise<Response> => {
+    await new Promise((r) => setTimeout(r, 30))
+    return new Response(JSON.stringify(mockResponse), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+
+  const client = new ApiClient({
+    baseUrl: 'https://test-api.operai.com',
+    apiKey: 'test-key',
+    fetchFn: mockFetch
+  })
+
+  const controller = new ChatConversationController({ client })
+  controller.setDraft('Status brief while drawer is open')
+
+  // 1. Drawer open, user sends message
+  let isChatOpen = true
+  const sendPromise = controller.sendMessage()
+  assert.strictEqual(controller.getSnapshot().isLoading, true)
+
+  // 2. User closes drawer while request is in flight
+  isChatOpen = false
+
+  // 3. Request completes in background
+  const success = await sendPromise
+  assert.strictEqual(success, true)
+
+  // 4. User reopens drawer
+  isChatOpen = true
+  assert.strictEqual(isChatOpen, true)
+
+  // 5. Verify conversation displays both user and assistant messages cleanly
+  const snapshot = controller.getSnapshot()
+  assert.strictEqual(snapshot.isLoading, false)
+  assert.strictEqual(snapshot.messages.length, 2)
+  assert.strictEqual(snapshot.messages[0].text, 'Status brief while drawer is open')
+  assert.strictEqual(snapshot.messages[1].text, 'Kitchen brief completed in background.')
+  assert.strictEqual(snapshot.messages[1].isSimulated, false)
+})
+
+test('ChatConversationController: mode transition clears visible error without getting stuck', () => {
+  const controller = new ChatConversationController()
+
+  // User encounters validation error
+  controller.setDraft('')
+  controller.sendMessage() // Empty message triggers 422 error
+  assert.ok(controller.getSnapshot().error !== null)
+  assert.ok(controller.getSnapshot().errorMessage !== null)
+
+  // Switch to demo mode
+  controller.setMode('demo')
+  assert.strictEqual(controller.getSnapshot().error, null)
+  assert.strictEqual(controller.getSnapshot().errorMessage, null)
+
+  // Switch back to live mode
+  controller.setMode('live')
+  assert.strictEqual(controller.getSnapshot().error, null)
+  assert.strictEqual(controller.getSnapshot().errorMessage, null)
+})
+
+

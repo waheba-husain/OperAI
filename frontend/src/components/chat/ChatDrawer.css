@@ -1,0 +1,66 @@
+/* ============================================================
+   OperAI Design System — ChatDrawer.css
+   Slide-out Right Drawer Container & Backdrop
+   ============================================================ */
+
+/* ── Backdrop ───────────────────────────────────────────────── */
+.chat-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 20, 0.45);
+  backdrop-filter: blur(2px);
+  z-index: var(--z-modal); /* 200: above TopNav and content */
+  display: flex;
+  justify-content: flex-end;
+  animation: chat-backdrop-fade 0.2s ease-out;
+}
+
+@keyframes chat-backdrop-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ── Drawer Panel ───────────────────────────────────────────── */
+.chat-drawer {
+  width: 440px;
+  max-width: 100vw;
+  height: 100%;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xl);
+  display: flex;
+  flex-direction: column;
+  animation: chat-drawer-slide-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  border-left: 1px solid var(--color-border);
+}
+
+@keyframes chat-drawer-slide-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* Ensure ChatPanel inside drawer fits 100% cleanly */
+.chat-drawer .chat-panel {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  height: 100%;
+}
+
+/* ── Responsive Mobile Full-Screen ──────────────────────────── */
+@media (max-width: 767px) {
+  .chat-drawer {
+    width: 100%;
+    max-width: 100vw;
+    height: 100dvh;
+    border-left: none;
+  }
+}
