@@ -1,0 +1,187 @@
+/* ============================================================
+   PlaceholderPage.css — OperAI App Shell
+   Consistent, intentional placeholder design for all 7 pages.
+   Uses design tokens. No hardcoded colours.
+   ============================================================ */
+
+/* ── Page wrapper ─────────────────────────────────────────── */
+.placeholder-page {
+  padding:        var(--space-8) var(--space-8) var(--space-16);
+  max-width:      840px;
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--space-8);
+}
+
+@media (max-width: 767px) {
+  .placeholder-page {
+    padding: var(--space-5) var(--space-4) var(--space-12);
+  }
+}
+
+/* ── Page header ──────────────────────────────────────────── */
+.placeholder-header {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--space-4);
+}
+
+.placeholder-header__top {
+  display:     flex;
+  align-items: flex-start;
+  gap:         var(--space-4);
+  flex-wrap:   wrap;
+}
+
+.placeholder-header__icon-wrap {
+  width:           52px;
+  height:          52px;
+  border-radius:   var(--radius-lg);
+  background:      var(--color-surface-secondary);
+  border:          1px solid var(--color-border);
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  color:           var(--color-primary);
+  flex-shrink:     0;
+}
+
+.placeholder-header__text {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--space-2);
+}
+
+.placeholder-header__phase {
+  display:        inline-flex;
+  align-items:    center;
+  gap:            var(--space-1);
+  font-size:      var(--text-xs);
+  font-weight:    var(--weight-semibold);
+  color:          var(--color-info);
+  background:     var(--color-info-bg);
+  border:         1px solid color-mix(in srgb, var(--color-info) 22%, transparent);
+  border-radius:  var(--radius-full);
+  padding:        2px var(--space-3);
+  letter-spacing: var(--tracking-wide);
+  align-self:     flex-start;
+}
+
+.placeholder-header__title {
+  font-size:      var(--text-3xl);
+  font-weight:    var(--weight-semibold);
+  color:          var(--color-text-primary);
+  letter-spacing: var(--tracking-tight);
+  line-height:    var(--leading-tight);
+  margin:         0;
+}
+
+@media (max-width: 767px) {
+  .placeholder-header__title {
+    font-size: var(--text-2xl);
+  }
+}
+
+.placeholder-header__desc {
+  font-size:   var(--text-base);
+  color:       var(--color-text-secondary);
+  line-height: var(--leading-relaxed);
+  max-width:   60ch;
+}
+
+/* ── Divider ──────────────────────────────────────────────── */
+.placeholder-divider {
+  border:     none;
+  border-top: 1px solid var(--color-border);
+}
+
+/* ── Upcoming features section ────────────────────────────── */
+.placeholder-features {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--space-4);
+}
+
+.placeholder-features__heading {
+  font-size:      var(--text-sm);
+  font-weight:    var(--weight-semibold);
+  color:          var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-widest);
+}
+
+.placeholder-features__grid {
+  display:               grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap:                   var(--space-3);
+}
+
+.placeholder-feature-card {
+  display:        flex;
+  align-items:    flex-start;
+  gap:            var(--space-3);
+  padding:        var(--space-4) var(--space-4);
+  background:     var(--color-surface);
+  border:         1px solid var(--color-border);
+  border-radius:  var(--radius-lg);
+  box-shadow:     var(--shadow-sm);
+  transition:     box-shadow var(--duration-base) var(--ease-out),
+                  border-color var(--duration-base) var(--ease-out);
+}
+
+.placeholder-feature-card:hover {
+  box-shadow:  var(--shadow-md);
+  border-color: var(--color-border-strong);
+}
+
+.placeholder-feature-card__check {
+  width:           20px;
+  height:          20px;
+  border-radius:   var(--radius-full);
+  background:      var(--color-surface-secondary);
+  border:          1px solid var(--color-border);
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  flex-shrink:     0;
+  margin-top:      1px;
+}
+
+.placeholder-feature-card__check svg {
+  color: var(--color-accent);
+}
+
+.placeholder-feature-card__text {
+  font-size:   var(--text-sm);
+  color:       var(--color-text-primary);
+  line-height: var(--leading-snug);
+}
+
+/* ── Info callout ─────────────────────────────────────────── */
+.placeholder-callout {
+  display:      flex;
+  align-items:  flex-start;
+  gap:          var(--space-3);
+  padding:      var(--space-4) var(--space-5);
+  background:   var(--color-surface);
+  border:       1px solid var(--color-border);
+  border-left:  3px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+}
+
+.placeholder-callout__icon {
+  color:       var(--color-accent);
+  flex-shrink: 0;
+  margin-top:  1px;
+}
+
+.placeholder-callout__text {
+  font-size:   var(--text-sm);
+  color:       var(--color-text-secondary);
+  line-height: var(--leading-relaxed);
+  max-width:   none;
+}
+
+.placeholder-callout__text strong {
+  color: var(--color-text-primary);
+}

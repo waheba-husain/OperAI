@@ -1,0 +1,69 @@
+/* ============================================================
+   AppLayout.css — OperAI App Shell
+   Three-region layout: sidebar | [topnav / content].
+   Sidebar and content each scroll independently.
+   Body/page never scrolls — only .app-content does.
+   ============================================================ */
+
+/* ── Shell ────────────────────────────────────────────────── */
+.app-shell {
+  display:  flex;
+  width:    100%;
+  height:   100%;   /* fills #root which is 100dvh */
+  overflow: hidden;
+}
+
+/* ── Main column (topnav + content) ───────────────────────── */
+.app-main {
+  flex:           1;
+  display:        flex;
+  flex-direction: column;
+  overflow:       hidden;
+  min-width:      0;   /* prevents flex overflow with long content */
+}
+
+/* ── Scrollable content canvas ────────────────────────────── */
+.app-content {
+  flex:                      1;
+  overflow-y:                auto;
+  -webkit-overflow-scrolling: touch;
+  background:                var(--color-background);
+}
+
+/* ── Mobile backdrop ──────────────────────────────────────── */
+.sidebar-backdrop {
+  position:    fixed;
+  inset:       0;
+  background:  rgba(0, 0, 0, 0.45);
+  z-index:     calc(var(--z-overlay) - 1);
+  /* Fade in/out */
+  animation:   backdrop-in var(--duration-slow) var(--ease-out) both;
+}
+
+@keyframes backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Only render the backdrop below the mobile breakpoint.
+   On desktop the sidebar is always in-flow and the
+   backdrop is never mounted. */
+@media (min-width: 768px) {
+  .sidebar-backdrop {
+    display: none;
+  }
+}
+
+/* ── Responsive: mobile collapses sidebar out of flow ─────── */
+@media (max-width: 767px) {
+  .app-shell {
+    /* Sidebar is position:fixed on mobile (see Sidebar.css).
+       .app-main fills the full width naturally. */
+  }
+
+  .app-content {
+    /* Extra bottom padding prevents content hiding behind
+       any future mobile bottom nav / safe-area. */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}

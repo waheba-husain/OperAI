@@ -1,0 +1,406 @@
+/* ============================================================
+   OperAI Design System — index.css
+   Cloud Kitchen Rescue | Amazon Developer Hackathon 2026
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   1. DESIGN TOKENS — Light Theme (Default)
+   ------------------------------------------------------------ */
+:root {
+  /* --- Brand Colours --- */
+  --color-background:        #F8F7F2;
+  --color-surface:           #FFFFFF;
+  --color-surface-secondary: #F1F0E9;
+  --color-sidebar:           #173D32;
+  --color-primary:           #2D5A46;
+  --color-primary-hover:     #244A39;
+  --color-accent:            #789780;
+  --color-warm-accent:       #C87555;
+
+  /* --- Semantic Text --- */
+  --color-text-primary:      #242923;
+  --color-text-secondary:    #68716A;
+  --color-text-on-primary:   #FFFFFF;
+  --color-text-on-warm:      #FFFFFF;
+  --color-text-placeholder:  #A3AC9F;
+
+  /* --- Borders --- */
+  --color-border:            #E8E6DE;
+  --color-border-subtle:     #F0EFE7;
+  --color-border-strong:     #CEC9BB;
+
+  /* --- Semantic States --- */
+  --color-success:           #34785A;
+  --color-success-bg:        #EBF5F0;
+  --color-warning:           #B77924;
+  --color-warning-bg:        #FBF3E4;
+  --color-danger:            #B84C43;
+  --color-danger-bg:         #FBEDEC;
+  --color-info:              #3B6FA0;
+  --color-info-bg:           #EDF3FA;
+
+  /* --- Focus Ring --- */
+  --color-focus-ring:        #2D5A46;
+  --color-focus-ring-offset: #F8F7F2;
+
+  /* --- Shadows --- */
+  --shadow-sm: 0 1px 2px 0 rgba(36, 41, 35, 0.06);
+  --shadow-md: 0 4px 12px 0 rgba(36, 41, 35, 0.09),
+               0 1px 3px 0 rgba(36, 41, 35, 0.06);
+  --shadow-lg: 0 12px 32px 0 rgba(36, 41, 35, 0.12),
+               0 3px 8px 0 rgba(36, 41, 35, 0.06);
+  --shadow-xl: 0 24px 48px -4px rgba(36, 41, 35, 0.16),
+               0 8px 16px -4px rgba(36, 41, 35, 0.08);
+
+  /* --- Typography --- */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter',
+               Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji';
+  --font-mono: ui-monospace, 'SF Mono', Cascadia Code, Consolas,
+               'Courier New', monospace;
+
+  /* Type scale */
+  --text-xs:   0.6875rem;   /*  11 px */
+  --text-sm:   0.8125rem;   /*  13 px */
+  --text-base: 0.9375rem;   /*  15 px */
+  --text-md:   1rem;        /*  16 px */
+  --text-lg:   1.125rem;    /*  18 px */
+  --text-xl:   1.25rem;     /*  20 px */
+  --text-2xl:  1.5rem;      /*  24 px */
+  --text-3xl:  1.875rem;    /*  30 px */
+  --text-4xl:  2.25rem;     /*  36 px */
+
+  /* Leading */
+  --leading-tight:   1.25;
+  --leading-snug:    1.375;
+  --leading-normal:  1.5;
+  --leading-relaxed: 1.625;
+
+  /* Tracking */
+  --tracking-tight:   -0.025em;
+  --tracking-normal:   0em;
+  --tracking-wide:     0.025em;
+  --tracking-widest:   0.08em;
+
+  /* Weight */
+  --weight-regular:  400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+  --weight-bold:     700;
+
+  /* --- Spacing --- */
+  --space-1:  0.25rem;
+  --space-2:  0.5rem;
+  --space-3:  0.75rem;
+  --space-4:  1rem;
+  --space-5:  1.25rem;
+  --space-6:  1.5rem;
+  --space-8:  2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+  --space-24: 6rem;
+
+  /* --- Border Radii --- */
+  --radius-sm:   0.25rem;
+  --radius-md:   0.5rem;
+  --radius-lg:   0.75rem;
+  --radius-xl:   1rem;
+  --radius-2xl:  1.25rem;
+  --radius-full: 9999px;
+
+  /* --- Transitions --- */
+  --duration-fast:   100ms;
+  --duration-base:   180ms;
+  --duration-slow:   300ms;
+  --ease-out:        cubic-bezier(0.0, 0, 0.2, 1);
+  --ease-in-out:     cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base:   var(--duration-base) var(--ease-out);
+  --transition-slow:   var(--duration-slow) var(--ease-out);
+  --transition-colors: color var(--duration-base) var(--ease-out),
+                       background-color var(--duration-base) var(--ease-out),
+                       border-color var(--duration-base) var(--ease-out);
+
+  /* --- Z-index --- */
+  --z-base:    0;
+  --z-raised:  10;
+  --z-overlay: 100;
+  --z-modal:   200;
+  --z-toast:   300;
+  --z-tooltip: 400;
+
+  /* --- Layout --- */
+  --sidebar-width:    240px;
+  --sidebar-width-sm: 64px;
+  --topbar-height:    56px;
+}
+
+/* ------------------------------------------------------------
+   2. DARK THEME
+   ------------------------------------------------------------ */
+[data-theme="dark"] {
+  --color-background:        #111916;
+  --color-surface:           #1A2620;
+  --color-surface-secondary: #222F28;
+  --color-sidebar:           #0E1C17;
+  --color-primary:           #5C9E7A;
+  --color-primary-hover:     #6AAF89;
+  --color-accent:            #7EA887;
+  --color-warm-accent:       #D9845D;
+  --color-text-primary:      #E8EDEA;
+  --color-text-secondary:    #8EA899;
+  --color-text-on-primary:   #FFFFFF;
+  --color-text-on-warm:      #FFFFFF;
+  --color-text-placeholder:  #4D6459;
+  --color-border:            #283830;
+  --color-border-subtle:     #1E2D27;
+  --color-border-strong:     #3D5749;
+  --color-success:           #52A87A;
+  --color-success-bg:        #172B22;
+  --color-warning:           #D4913A;
+  --color-warning-bg:        #241C0D;
+  --color-danger:            #D96B62;
+  --color-danger-bg:         #2A1210;
+  --color-info:              #5A96CC;
+  --color-info-bg:           #0D1F30;
+  --color-focus-ring:        #5C9E7A;
+  --color-focus-ring-offset: #111916;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.24);
+  --shadow-md: 0 4px 12px 0 rgba(0, 0, 0, 0.36),
+               0 1px 3px 0 rgba(0, 0, 0, 0.24);
+  --shadow-lg: 0 12px 32px 0 rgba(0, 0, 0, 0.48),
+               0 3px 8px 0 rgba(0, 0, 0, 0.24);
+  --shadow-xl: 0 24px 48px -4px rgba(0, 0, 0, 0.56),
+               0 8px 16px -4px rgba(0, 0, 0, 0.32);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-background:        #111916;
+    --color-surface:           #1A2620;
+    --color-surface-secondary: #222F28;
+    --color-sidebar:           #0E1C17;
+    --color-primary:           #5C9E7A;
+    --color-primary-hover:     #6AAF89;
+    --color-accent:            #7EA887;
+    --color-warm-accent:       #D9845D;
+    --color-text-primary:      #E8EDEA;
+    --color-text-secondary:    #8EA899;
+    --color-text-on-primary:   #FFFFFF;
+    --color-text-on-warm:      #FFFFFF;
+    --color-text-placeholder:  #4D6459;
+    --color-border:            #283830;
+    --color-border-subtle:     #1E2D27;
+    --color-border-strong:     #3D5749;
+    --color-success:           #52A87A;
+    --color-success-bg:        #172B22;
+    --color-warning:           #D4913A;
+    --color-warning-bg:        #241C0D;
+    --color-danger:            #D96B62;
+    --color-danger-bg:         #2A1210;
+    --color-info:              #5A96CC;
+    --color-info-bg:           #0D1F30;
+    --color-focus-ring:        #5C9E7A;
+    --color-focus-ring-offset: #111916;
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.24);
+    --shadow-md: 0 4px 12px 0 rgba(0, 0, 0, 0.36),
+                 0 1px 3px 0 rgba(0, 0, 0, 0.24);
+    --shadow-lg: 0 12px 32px 0 rgba(0, 0, 0, 0.48),
+                 0 3px 8px 0 rgba(0, 0, 0, 0.24);
+    --shadow-xl: 0 24px 48px -4px rgba(0, 0, 0, 0.56),
+                 0 8px 16px -4px rgba(0, 0, 0, 0.32);
+  }
+}
+
+/* ------------------------------------------------------------
+   3. GLOBAL RESET
+   ------------------------------------------------------------ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin:     0;
+  padding:    0;
+}
+
+nav ul,
+nav ol,
+menu {
+  list-style: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+img,
+svg,
+video,
+canvas {
+  display:   block;
+  max-width: 100%;
+}
+
+svg {
+  flex-shrink: 0;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid var(--color-border);
+}
+
+fieldset {
+  border: none;
+}
+
+/* ------------------------------------------------------------
+   4. BASE TYPOGRAPHY
+   ------------------------------------------------------------ */
+html {
+  font-size:               15px;
+  -webkit-font-smoothing:  antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering:          optimizeLegibility;
+  font-synthesis:          none;
+  scroll-behavior:         smooth;
+}
+
+body {
+  font-family:           var(--font-sans);
+  font-size:             var(--text-base);
+  font-weight:           var(--weight-regular);
+  line-height:           var(--leading-normal);
+  color:                 var(--color-text-primary);
+  background:            var(--color-background);
+  min-height:            100dvh;
+  text-size-adjust:      100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family:     var(--font-sans);
+  font-weight:     var(--weight-semibold);
+  line-height:     var(--leading-tight);
+  color:           var(--color-text-primary);
+  letter-spacing:  var(--tracking-tight);
+}
+
+h1 { font-size: var(--text-4xl); }
+h2 { font-size: var(--text-3xl); }
+h3 { font-size: var(--text-2xl); }
+h4 { font-size: var(--text-xl); }
+h5 { font-size: var(--text-lg); }
+h6 { font-size: var(--text-md); }
+
+p {
+  line-height: var(--leading-relaxed);
+  color:       var(--color-text-secondary);
+  max-width:   68ch;
+}
+
+a {
+  color:                var(--color-primary);
+  text-decoration:      underline;
+  text-underline-offset: 2px;
+  transition:           var(--transition-colors);
+}
+
+a:hover {
+  color: var(--color-primary-hover);
+}
+
+strong, b {
+  font-weight: var(--weight-semibold);
+}
+
+small {
+  font-size: var(--text-sm);
+  color:     var(--color-text-secondary);
+}
+
+code, kbd, samp, pre {
+  font-family: var(--font-mono);
+  font-size:   0.9em;
+}
+
+code {
+  background:    var(--color-surface-secondary);
+  border:        1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding:       0.1em 0.35em;
+}
+
+/* ------------------------------------------------------------
+   5. ACCESSIBLE FOCUS STYLES
+   ------------------------------------------------------------ */
+:focus-visible {
+  outline:        2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+  border-radius:  var(--radius-sm);
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ------------------------------------------------------------
+   6. APPLICATION ROOT — Full-Viewport Dashboard Foundation
+   ------------------------------------------------------------ */
+
+/* height + overflow:hidden keeps the viewport fixed;
+   scrolling happens inside .app-content, not the page body. */
+#root {
+  display:        flex;
+  flex-direction: column;
+  height:         100dvh;
+  width:          100%;
+  overflow:       hidden;
+}
+
+/* ------------------------------------------------------------
+   7. REDUCED-MOTION
+   ------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration:        0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration:       0.01ms !important;
+    scroll-behavior:           auto !important;
+  }
+}
+
+/* ------------------------------------------------------------
+   8. SCROLLBAR REFINEMENT
+   ------------------------------------------------------------ */
+::-webkit-scrollbar {
+  width:  8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background:    var(--color-border);
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border-strong);
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+/* ------------------------------------------------------------
+   9. SELECTION
+   ------------------------------------------------------------ */
+::selection {
+  background: color-mix(in srgb, var(--color-primary) 22%, transparent);
+  color:      var(--color-text-primary);
+}

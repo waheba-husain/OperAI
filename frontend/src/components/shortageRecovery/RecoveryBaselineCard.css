@@ -1,0 +1,113 @@
+/* ============================================================
+   frontend/src/components/shortageRecovery/RecoveryBaselineCard.css
+   OperAI / Cloud Kitchen Rescue — Baseline Scenario Card Styles
+   ============================================================ */
+
+.recovery-baseline-card {
+  background: var(--color-surface);
+  border: 1px dashed var(--color-border-hover);
+  border-left: 4px solid var(--color-neutral-500, #6b7280);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  box-shadow: var(--shadow-sm);
+}
+
+.recovery-baseline-card__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.recovery-baseline-card__badge-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.recovery-baseline-card__type-badge {
+  font-size: 10px;
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-secondary);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+}
+
+.recovery-baseline-card__tag {
+  font-size: 11px;
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-tertiary);
+}
+
+.recovery-baseline-card__title {
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  color: var(--color-text-primary);
+  margin: var(--space-1) 0 0;
+}
+
+.recovery-baseline-card__note {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.recovery-baseline-card__metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-surface-secondary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+.baseline-metric-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.baseline-metric-label {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  font-weight: var(--weight-medium);
+}
+
+.baseline-metric-val {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  color: var(--color-text-primary);
+}
+
+.baseline-metric-item--negative .baseline-metric-val {
+  color: var(--color-red-600, #dc2626);
+}
+
+.baseline-metric-item--warning .baseline-metric-val {
+  color: var(--color-amber-700, #b45309);
+}
+
+.recovery-baseline-card__footer {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  padding-top: var(--space-2);
+  border-top: 1px dashed var(--color-border);
+}
+
+.baseline-footer-warning-icon {
+  font-size: var(--text-sm);
+}
+
+.baseline-footer-text {
+  line-height: var(--leading-normal);
+}

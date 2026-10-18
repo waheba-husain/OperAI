@@ -1,0 +1,170 @@
+/* ============================================================
+   TopNav.css — OperAI App Shell
+   Sticky top bar: surface colour, border-bottom, 56px tall.
+   Theme-aware via CSS custom properties.
+   ============================================================ */
+
+/* ── Container ────────────────────────────────────────────── */
+.topnav {
+  height:          var(--topbar-height);   /* 56px */
+  flex-shrink:     0;
+  display:         flex;
+  align-items:     center;
+  gap:             var(--space-3);
+  padding:         0 var(--space-5);
+  background:      var(--color-surface);
+  border-bottom:   1px solid var(--color-border);
+  z-index:         var(--z-raised);
+}
+
+/* ── Hamburger (mobile only) ──────────────────────────────── */
+.topnav__menu-btn {
+  display:         none;   /* hidden on desktop */
+  align-items:     center;
+  justify-content: center;
+  width:           36px;
+  height:          36px;
+  border:          none;
+  border-radius:   var(--radius-md);
+  background:      transparent;
+  color:           var(--color-text-secondary);
+  cursor:          pointer;
+  flex-shrink:     0;
+  transition:      background-color var(--duration-base) var(--ease-out),
+                   color            var(--duration-base) var(--ease-out);
+}
+
+.topnav__menu-btn:hover {
+  background: var(--color-surface-secondary);
+  color:      var(--color-text-primary);
+}
+
+@media (max-width: 767px) {
+  .topnav__menu-btn {
+    display: flex;
+  }
+}
+
+/* ── Divider (mobile: between hamburger and title) ─────────── */
+.topnav__sep {
+  width:       1px;
+  height:      20px;
+  background:  var(--color-border);
+  flex-shrink: 0;
+  display:     none;
+}
+
+@media (max-width: 767px) {
+  .topnav__sep {
+    display: block;
+  }
+}
+
+/* ── Page title area ──────────────────────────────────────── */
+.topnav__title-area {
+  display:        flex;
+  flex-direction: column;
+  justify-content: center;
+  gap:            1px;
+  flex:           1;
+  min-width:      0;
+}
+
+.topnav__title {
+  font-size:      var(--text-md);
+  font-weight:    var(--weight-semibold);
+  color:          var(--color-text-primary);
+  letter-spacing: var(--tracking-tight);
+  line-height:    var(--leading-tight);
+  white-space:    nowrap;
+  overflow:       hidden;
+  text-overflow:  ellipsis;
+}
+
+.topnav__breadcrumb {
+  font-size:      var(--text-xs);
+  color:          var(--color-text-secondary);
+  letter-spacing: var(--tracking-wide);
+  display:        flex;
+  align-items:    center;
+  gap:            var(--space-1);
+}
+
+.topnav__breadcrumb-sep {
+  color: var(--color-border-strong);
+}
+
+/* ── Right slot ───────────────────────────────────────────── */
+.topnav__actions {
+  display:     flex;
+  align-items: center;
+  gap:         var(--space-2);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* ── Kitchen status badge ─────────────────────────────────── */
+.topnav__status {
+  display:       flex;
+  align-items:   center;
+  gap:           var(--space-2);
+  padding:       var(--space-1) var(--space-3);
+  background:    var(--color-success-bg);
+  border:        1px solid color-mix(in srgb, var(--color-success) 22%, transparent);
+  border-radius: var(--radius-full);
+  font-size:     var(--text-xs);
+  font-weight:   var(--weight-medium);
+  color:         var(--color-success);
+  white-space:   nowrap;
+}
+
+.topnav__status-dot {
+  width:         6px;
+  height:        6px;
+  border-radius: var(--radius-full);
+  background:    var(--color-success);
+  flex-shrink:   0;
+  animation:     topnav-pulse 2.5s ease-in-out infinite;
+}
+
+@keyframes topnav-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+
+/* Hide status text on very small screens */
+.topnav__status-text {
+  display: block;
+}
+
+@media (max-width: 479px) {
+  .topnav__status-text {
+    display: none;
+  }
+}
+
+/* ── Icon buttons (theme toggle, settings) ────────────────── */
+.topnav__icon-btn {
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  width:           36px;
+  height:          36px;
+  border-radius:   var(--radius-md);
+  border:          1px solid var(--color-border);
+  background:      var(--color-surface);
+  color:           var(--color-text-secondary);
+  cursor:          pointer;
+  flex-shrink:     0;
+  transition:      background-color var(--duration-base) var(--ease-out),
+                   border-color     var(--duration-base) var(--ease-out),
+                   color            var(--duration-base) var(--ease-out),
+                   box-shadow       var(--duration-base) var(--ease-out);
+}
+
+.topnav__icon-btn:hover {
+  background:   var(--color-surface-secondary);
+  border-color: var(--color-border-strong);
+  color:        var(--color-text-primary);
+  box-shadow:   var(--shadow-sm);
+}

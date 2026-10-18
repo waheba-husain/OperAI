@@ -1,0 +1,362 @@
+/* ============================================================
+   frontend/src/components/shortageRecovery/RecoveryOptionCard.css
+   OperAI / Cloud Kitchen Rescue — Candidate Recovery Option Card Styles
+   ============================================================ */
+
+.recovery-option-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-neutral-300, #d1d5db);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.recovery-option-card:hover {
+  border-color: var(--color-border-hover);
+  box-shadow: var(--shadow-md);
+}
+
+.recovery-option-card--recommended {
+  border-left: 4px solid var(--color-primary);
+  background: linear-gradient(
+    to bottom right,
+    rgba(30, 77, 43, 0.03),
+    var(--color-surface)
+  );
+  border-color: rgba(30, 77, 43, 0.3);
+}
+
+.recovery-option-card--executed {
+  border-left-color: var(--color-green-600, #059669);
+  background: linear-gradient(
+    to bottom right,
+    rgba(5, 150, 105, 0.04),
+    var(--color-surface)
+  );
+}
+
+.recovery-option-card--rejected {
+  border-left-color: var(--color-red-500, #ef4444);
+  opacity: 0.85;
+}
+
+.recovery-option-card--expired {
+  border-left-color: var(--color-neutral-400, #9ca3af);
+  opacity: 0.75;
+}
+
+.recovery-option-card__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.recovery-option-card__badges {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.recovery-option-number-badge {
+  font-size: 11px;
+  font-weight: var(--weight-bold);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+}
+
+.recovery-option-type-badge {
+  font-size: 11px;
+  font-weight: var(--weight-semibold);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--color-blue-600, #2563eb);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.recovery-option-recommended-pill {
+  font-size: 11px;
+  font-weight: var(--weight-bold);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: rgba(30, 77, 43, 0.12);
+  color: var(--color-primary);
+  border: 1px solid rgba(30, 77, 43, 0.3);
+}
+
+.recovery-option-status-tag {
+  font-size: 11px;
+  font-weight: var(--weight-semibold);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  margin-left: auto;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+}
+
+.recovery-option-status-tag--pending {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--color-blue-600, #2563eb);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.recovery-option-status-tag--executed {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--color-green-700, #047857);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  font-weight: var(--weight-bold);
+}
+
+.recovery-option-status-tag--rejected {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--color-red-600, #dc2626);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.recovery-option-status-tag--expired {
+  background: rgba(156, 163, 175, 0.15);
+  color: var(--color-neutral-600, #4b5563);
+  border: 1px solid rgba(156, 163, 175, 0.3);
+}
+
+.recovery-option-card__title {
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  color: var(--color-text-primary);
+  margin: var(--space-1) 0 0;
+}
+
+/* Consent Banner */
+.recovery-consent-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: rgba(217, 119, 6, 0.08);
+  border: 1px solid rgba(217, 119, 6, 0.3);
+  border-radius: var(--radius-md);
+}
+
+.recovery-consent-icon {
+  font-size: var(--text-base);
+  flex-shrink: 0;
+}
+
+.recovery-consent-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.recovery-consent-title {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  color: var(--color-amber-800, #92400e);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+}
+
+.recovery-consent-desc {
+  font-size: var(--text-xs);
+  color: var(--color-amber-900, #78350f);
+  margin: 0;
+  line-height: var(--leading-normal);
+}
+
+/* Impact Evaluation Grid */
+.recovery-option-card__impact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--color-surface-secondary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+.recovery-impact-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.recovery-impact-label {
+  font-size: 10px;
+  color: var(--color-text-tertiary);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+}
+
+.recovery-impact-val {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  color: var(--color-text-primary);
+}
+
+.recovery-impact-val--positive {
+  color: var(--color-green-600, #059669);
+}
+
+.recovery-impact-val--highlight {
+  color: var(--color-primary);
+}
+
+/* Mutation Controls */
+.recovery-option-card__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding-top: var(--space-1);
+}
+
+.recovery-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border: 1px solid transparent;
+}
+
+.recovery-action-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.recovery-action-btn--approve {
+  background: var(--color-primary);
+  color: var(--color-text-inverse, #ffffff);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.recovery-action-btn--approve:hover:not(:disabled) {
+  filter: brightness(1.1);
+  box-shadow: 0 2px 4px rgba(30, 77, 43, 0.25);
+}
+
+.recovery-action-btn--approve:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.recovery-action-btn--reject {
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-color: var(--color-border);
+}
+
+.recovery-action-btn--reject:hover:not(:disabled) {
+  color: var(--color-red-600, #dc2626);
+  border-color: rgba(220, 38, 38, 0.3);
+  background: rgba(220, 38, 38, 0.04);
+}
+
+.recovery-action-btn--reject:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.recovery-btn-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: recovery-spin 0.8s linear infinite;
+}
+
+@keyframes recovery-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.recovery-demo-mode-note {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  font-style: italic;
+}
+
+.recovery-action-completed-banner {
+  width: 100%;
+  font-size: var(--text-xs);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-weight: var(--weight-medium);
+}
+
+.recovery-action-completed-banner--executed {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--color-green-800, #065f46);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.recovery-action-completed-banner--rejected {
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--color-red-700, #b91c1c);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.recovery-action-completed-banner--expired {
+  background: rgba(156, 163, 175, 0.1);
+  color: var(--color-neutral-600, #4b5563);
+  border: 1px solid rgba(156, 163, 175, 0.2);
+}
+
+.recovery-card-mutation-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--color-red-700, #b91c1c);
+}
+
+/* Footer & Expiry */
+.recovery-option-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding-top: var(--space-2);
+  border-top: 1px dashed var(--color-border);
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+}
+
+.recovery-expiry-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.recovery-expiry-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-amber-500, #f59e0b);
+}
+
+.recovery-safety-notice {
+  font-style: italic;
+}

@@ -1,0 +1,245 @@
+/* ============================================================
+   src/components/overview/KitchenHealthPanel.css
+   Progress indicators and status treatments for Kitchen Health.
+   ============================================================ */
+
+.health-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition-colors);
+}
+
+.health-card:hover {
+  border-color: var(--color-border-strong);
+}
+
+.health-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.health-card__titles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.health-card__badge-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.health-card__badge {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--color-primary);
+  background: var(--color-success-bg);
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-sm);
+}
+
+.health-card__simulated {
+  font-size: var(--text-xs);
+  color: var(--color-text-placeholder);
+  background: var(--color-surface-secondary);
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--radius-sm);
+}
+
+.health-card__title {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-primary);
+  margin: 0;
+  line-height: var(--leading-tight);
+}
+
+.health-card__status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--color-success-bg);
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-full);
+}
+
+.health-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-success);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-success) 25%, transparent);
+}
+
+.health-status-text {
+  font-size: 11px;
+  font-weight: var(--weight-semibold);
+  color: var(--color-success);
+}
+
+/* Throughput Bar */
+.health-throughput-bar {
+  background: var(--color-surface-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.health-throughput-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.health-throughput-label {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.health-throughput-val {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  color: var(--color-primary);
+}
+
+.health-throughput-sub {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+/* Progress track & fills */
+.health-progress-track {
+  width: 100%;
+  height: 8px;
+  background: var(--color-border);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.health-progress-track.is-station {
+  height: 6px;
+}
+
+.health-progress-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width 0.4s var(--ease-out);
+}
+
+.health-progress-fill.is-primary {
+  background: var(--color-primary);
+}
+
+.health-progress-fill.is-low {
+  background: var(--color-accent);
+}
+
+.health-progress-fill.is-medium {
+  background: var(--color-primary);
+}
+
+.health-progress-fill.is-high {
+  background: var(--color-warm-accent);
+}
+
+/* Stations list */
+.health-stations-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.health-stations-empty {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  padding: var(--space-4) 0;
+  text-align: center;
+  font-style: italic;
+}
+
+.station-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.station-row__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.station-row__name {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-primary);
+}
+
+.station-row__metrics {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.station-row__cooks {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.station-row__pct {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  font-family: var(--font-mono);
+}
+
+.station-row__pct.is-low { color: var(--color-accent); }
+.station-row__pct.is-medium { color: var(--color-primary); }
+.station-row__pct.is-high { color: var(--color-warm-accent); }
+
+/* Operational Pills Footer */
+.health-footer-pills {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.health-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-secondary);
+  border: 1px solid var(--color-border-subtle);
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+}
+
+.health-pill__icon.is-ok {
+  color: var(--color-success);
+}
+
+.health-pill__icon.is-active {
+  color: var(--color-primary);
+}
