@@ -93,3 +93,11 @@ npm run dev
 - Tests written and passing
 - No new dependencies, no unrelated changes
 - Hard rules above still hold
+
+## Feature workflow
+
+When I say "implement feature N":
+1. Read docs/features.md section N and every doc section it references. Follow the Conventions section at the top of features.md.
+2. Build only what that section lists. Nothing from other features.
+3. Write the required tests, run pytest, and boot the server.
+4. Don't commit. Report what you ran, what passed, and any spec conflict. If docs disagree, stop and ask.
