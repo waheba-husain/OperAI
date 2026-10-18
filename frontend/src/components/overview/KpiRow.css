@@ -1,0 +1,188 @@
+/* ============================================================
+   src/components/overview/KpiRow.css
+   Compact, visually differentiated KPI cards.
+   ============================================================ */
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-4);
+  width: 100%;
+}
+
+@media (max-width: 1080px) {
+  .kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 580px) {
+  .kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.kpi-card {
+  position: relative;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--duration-fast), border-color var(--duration-base), box-shadow var(--duration-base);
+  overflow: hidden;
+}
+
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--color-border);
+  transition: background-color var(--duration-base);
+}
+
+.kpi-card:hover {
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+/* Variant differentiation */
+.kpi-card--primary::before {
+  background: var(--color-primary);
+}
+.kpi-card--primary .kpi-card__icon-wrap {
+  background: var(--color-success-bg);
+  color: var(--color-primary);
+}
+
+.kpi-card--revenue::before {
+  background: var(--color-warning);
+}
+.kpi-card--revenue .kpi-card__icon-wrap {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.kpi-card--margin::before {
+  background: var(--color-accent);
+}
+.kpi-card--margin .kpi-card__icon-wrap {
+  background: var(--color-surface-secondary);
+  color: var(--color-primary);
+}
+
+.kpi-card--attention::before {
+  background: var(--color-warm-accent);
+}
+.kpi-card--attention .kpi-card__icon-wrap {
+  background: var(--color-danger-bg);
+  color: var(--color-warm-accent);
+}
+
+.kpi-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.kpi-card__label {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.kpi-card__icon-wrap {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.kpi-card__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.kpi-card__value-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.kpi-card__value {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  color: var(--color-text-primary);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+}
+
+.kpi-card__trend {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+}
+
+.kpi-card__trend--up {
+  color: var(--color-success);
+  background: var(--color-success-bg);
+}
+
+.kpi-card__trend--down {
+  color: var(--color-warm-accent);
+  background: var(--color-danger-bg);
+}
+
+.kpi-card__trend--neutral {
+  color: var(--color-text-secondary);
+  background: var(--color-surface-secondary);
+}
+
+.kpi-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.kpi-card__supporting {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  line-height: 1.35;
+}
+
+.kpi-card__simulated-pill {
+  font-size: 10px;
+  font-weight: var(--weight-medium);
+  color: var(--color-text-placeholder);
+  background: var(--color-surface-secondary);
+  padding: 1px 4px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.kpi-card__simulated-pill.is-live {
+  color: var(--color-success);
+  background: var(--color-success-bg);
+}

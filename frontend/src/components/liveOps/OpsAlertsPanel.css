@@ -1,0 +1,239 @@
+/* ============================================================
+   src/components/liveOps/OpsAlertsPanel.css
+   Severity-differentiated operational alert list.
+   ============================================================ */
+
+.ops-alerts-panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition-colors);
+}
+
+.ops-alerts-panel__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.ops-alerts-panel__badge-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ops-alerts-panel__badge {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--color-warm-accent);
+  background: var(--color-danger-bg);
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-sm);
+}
+
+.ops-alerts-panel__simulated {
+  font-size: var(--text-xs);
+  color: var(--color-text-placeholder);
+  background: var(--color-surface-secondary);
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--radius-sm);
+}
+
+.ops-alerts-panel__title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.ops-alerts-panel__title {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-primary);
+  margin: 0;
+  line-height: var(--leading-tight);
+}
+
+.ops-alerts-panel__counts {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ops-alert-count-badge {
+  font-size: 11px;
+  font-weight: var(--weight-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.ops-alert-count-badge.is-critical { color: var(--color-warm-accent); background: var(--color-danger-bg); }
+.ops-alert-count-badge.is-warning  { color: var(--color-warning); background: var(--color-warning-bg); }
+
+.ops-alerts-panel__subtitle {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+/* ── Alert List ───────────────────────────────────────────── */
+.ops-alerts-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.ops-alert-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  background: var(--color-surface-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  transition: border-color var(--duration-fast);
+}
+
+.ops-alert-item:hover {
+  border-color: var(--color-border-strong);
+}
+
+.ops-alert-item.is-critical {
+  background: color-mix(in srgb, var(--color-warm-accent) 5%, var(--color-surface-secondary));
+  border-left: 3px solid var(--color-warm-accent);
+}
+
+.ops-alert-item.is-warning {
+  background: color-mix(in srgb, var(--color-warning) 5%, var(--color-surface-secondary));
+  border-left: 3px solid var(--color-warning);
+}
+
+.ops-alert-item.is-info {
+  border-left: 3px solid var(--color-accent);
+}
+
+.ops-alert-item__icon-col {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.ops-alert-icon.is-critical { color: var(--color-warm-accent); }
+.ops-alert-icon.is-warning  { color: var(--color-warning); }
+.ops-alert-icon.is-info     { color: var(--color-primary); }
+
+.ops-alert-item__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  flex: 1;
+}
+
+.ops-alert-item__header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.ops-alert-severity-pill {
+  font-size: 10px;
+  font-weight: var(--weight-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+}
+
+.ops-alert-severity-pill.is-critical { color: var(--color-warm-accent); background: var(--color-danger-bg); }
+.ops-alert-severity-pill.is-warning  { color: var(--color-warning); background: var(--color-warning-bg); }
+.ops-alert-severity-pill.is-info     { color: var(--color-primary); background: var(--color-success-bg); }
+
+.ops-alert-item__time {
+  font-size: 11px;
+  color: var(--color-text-placeholder);
+}
+
+.ops-alert-item__title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.ops-alert-item__detail {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.ops-alert-item__context {
+  font-size: 11px;
+  font-weight: var(--weight-medium);
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  display: inline-block;
+  margin-top: 2px;
+}
+
+.ops-alert-item__context.is-critical {
+  color: var(--color-warm-accent);
+  background: var(--color-danger-bg);
+  border-color: color-mix(in srgb, var(--color-warm-accent) 25%, transparent);
+}
+
+/* Footer */
+.ops-alerts-panel__footer {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.ops-alerts-footer-icon {
+  color: var(--color-primary);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.ops-alerts-panel__disclaimer {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* ── Live / Demo Badges ───────────────────────────────────── */
+.ops-alerts-panel__simulated.is-live {
+  background: var(--color-success-bg, rgba(16, 185, 129, 0.12));
+  color: var(--color-success);
+  border: 1px solid var(--color-success-border, rgba(16, 185, 129, 0.25));
+}
+
+/* ── Empty State ──────────────────────────────────────────── */
+.ops-alerts-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-4);
+  background: var(--color-surface-secondary);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
