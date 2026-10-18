@@ -495,6 +495,15 @@ export interface DailySummaryDTO {
 
 /* ── 10. AI Agent Assistant Contract (Rest_API_Spec.md §3.16) ── */
 
+/** Documented input mode for assistant chat requests (Rest_API_Spec.md §3.16) */
+export type AgentChatInputModeDTO = 'voice' | 'text'
+
+/** Request shape for POST /api/agent/chat (Rest_API_Spec.md §3.16) */
+export interface AgentChatRequestDTO {
+  readonly message: string // required, 1 to 500 characters
+  readonly input_mode?: AgentChatInputModeDTO
+}
+
 /** Response shape for POST /api/agent/chat (Rest_API_Spec.md §3.16) */
 export interface AgentChatResponseDTO {
   readonly reply: string
@@ -504,3 +513,4 @@ export interface AgentChatResponseDTO {
   readonly requires_confirmation: boolean
   readonly confirm_phrases: readonly string[]
 }
+

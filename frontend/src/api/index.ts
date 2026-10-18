@@ -13,6 +13,7 @@ export { ApiError, ConfigurationError, NetworkError } from './errors'
 // Typed Endpoint Helpers
 export {
   approveAction,
+  chatAgent,
   getActions,
   getAudit,
   getBrief,
