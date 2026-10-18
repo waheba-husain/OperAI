@@ -16,6 +16,7 @@ import type {
   ActionStatusDTO,
   AuditEventTypeDTO,
   AuditListResponseDTO,
+  AuditUndoResponseDTO,
   BriefResponseDTO,
   DailySummaryDTO,
   IngredientListResponseDTO,
@@ -196,6 +197,23 @@ export async function getAudit(
 ): Promise<AuditListResponseDTO> {
   const client = options?.client ?? defaultClient
   return client.get<AuditListResponseDTO>('/api/audit', params, { signal: options?.signal })
+}
+
+/**
+ * Propose reversing a past change using its stored before_snapshot (Rest_API_Spec.md §3.15).
+ * Creates a pending undo action that must subsequently be approved via approveAction().
+ * NOTE: This endpoint ONLY proposes the reversal as a pending action; it does NOT execute the undo.
+ */
+export async function undoAudit(
+  id: string,
+  options?: { signal?: AbortSignal; client?: ApiClient }
+): Promise<AuditUndoResponseDTO> {
+  const client = options?.client ?? defaultClient
+  return client.post<AuditUndoResponseDTO>(
+    `/api/audit/${encodeURIComponent(id)}/undo`,
+    undefined,
+    { signal: options?.signal }
+  )
 }
 
 /* ── 9. Propose Recovery (Rest_API_Spec.md §3.10) ──────────── */

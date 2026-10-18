@@ -22,7 +22,8 @@ export {
   getPlan,
   getSummary,
   proposeRecovery,
-  rejectAction
+  rejectAction,
+  undoAudit
 } from './endpoints'
 export type {
   GetActionsParams,
@@ -92,3 +93,19 @@ export {
   formatExtraCostLabel,
   formatOptionTypeLabel
 } from './adapters/recoveryAdapter'
+
+export {
+  adaptAuditLogsToViewModels,
+  adaptAuditLogToViewModel,
+  adaptSnapshotComparison,
+  adaptUndoResponseToViewModel,
+  AUDIT_ACTOR_PRESENTATION_MAP,
+  AUDIT_EVENT_PRESENTATION_MAP,
+  deriveAuditLogSummary,
+  formatAuditTimestampIST,
+  formatSnapshotValue,
+  mapAuditActorPresentation,
+  mapAuditEventPresentation,
+  mapPlanVersionTransition,
+  resolveUndoOptionNumberFromActions
+} from './adapters/auditAdapter'

@@ -1,0 +1,283 @@
+/* ============================================================
+   frontend/src/components/audit/UndoProposalModal.css
+   OperAI / Cloud Kitchen Rescue — Undo Proposal Confirmation Modal
+   ============================================================ */
+
+.undo-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+  padding: var(--space-4);
+  animation: undo-modal-fade 0.2s var(--ease-out);
+}
+
+@keyframes undo-modal-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.undo-modal {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  width: 100%;
+  max-width: 640px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+  animation: undo-modal-slide 0.25s var(--ease-out);
+}
+
+@keyframes undo-modal-slide {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.undo-modal__header {
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  background: var(--color-surface-secondary);
+}
+
+.undo-modal__title-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.undo-modal__kicker {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #B45309;
+}
+
+[data-theme="dark"] .undo-modal__kicker {
+  color: #FBBF24;
+}
+
+.undo-modal__title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  color: var(--color-text-primary);
+}
+
+.undo-modal__close-btn {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+  line-height: 1;
+  transition: color var(--duration-fast);
+}
+
+.undo-modal__close-btn:hover {
+  color: var(--color-text-primary);
+}
+
+.undo-modal__body {
+  padding: var(--space-6);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* Pending Warning Banner */
+.undo-pending-banner {
+  background: #FFFBEB;
+  border: 1px solid #F59E0B;
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+  color: #92400E;
+  line-height: var(--leading-normal);
+}
+
+[data-theme="dark"] .undo-pending-banner {
+  background: rgba(180, 83, 9, 0.2);
+  border-color: #B45309;
+  color: #FDE68A;
+}
+
+.undo-pending-banner strong {
+  display: block;
+  font-size: var(--text-sm);
+  margin-bottom: 0.15rem;
+  color: #78350F;
+}
+
+[data-theme="dark"] .undo-pending-banner strong {
+  color: #FBBF24;
+}
+
+/* Error Banner */
+.undo-error-banner {
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--color-danger);
+  line-height: var(--leading-normal);
+}
+
+/* Proposal Grid */
+.undo-proposal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+}
+
+.undo-proposal-cell {
+  background: var(--color-surface-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.undo-cell-label {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: var(--weight-semibold);
+}
+
+.undo-cell-val {
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  font-weight: var(--weight-medium);
+}
+
+.undo-cell-val--option {
+  font-family: var(--font-mono);
+  font-weight: var(--weight-bold);
+  color: var(--color-primary);
+}
+
+/* Resolution notice */
+.undo-resolution-warning {
+  background: var(--color-warning-bg);
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--color-warning);
+  line-height: var(--leading-normal);
+}
+
+/* Footer */
+.undo-modal__footer {
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  background: var(--color-surface-secondary);
+}
+
+.undo-modal__footer-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.undo-btn-cancel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: all var(--duration-fast);
+}
+
+.undo-btn-cancel:hover {
+  background: var(--color-border-subtle);
+  border-color: var(--color-border-strong);
+}
+
+.undo-btn-approve {
+  appearance: none;
+  background: #047857;
+  border: 1px solid #047857;
+  color: #FFFFFF;
+  padding: 0.55rem 1.25rem;
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--duration-fast);
+}
+
+.undo-btn-approve:hover:not(:disabled) {
+  background: #065F46;
+  border-color: #065F46;
+  box-shadow: var(--shadow-md);
+}
+
+.undo-btn-approve:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--color-surface-secondary);
+  color: var(--color-text-secondary);
+  border-color: var(--color-border);
+  box-shadow: none;
+}
+
+@media (max-width: 600px) {
+  .undo-proposal-grid {
+    grid-template-columns: 1fr;
+  }
+  .undo-modal__footer {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+  .undo-modal__footer-actions {
+    flex-direction: column-reverse;
+  }
+  .undo-btn-cancel,
+  .undo-btn-approve {
+    width: 100%;
+    justify-content: center;
+  }
+}

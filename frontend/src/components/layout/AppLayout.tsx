@@ -17,6 +17,7 @@ import { OverviewPage }         from '../../pages/OverviewPage'
 import { LiveOperationsPage }   from '../../pages/LiveOperationsPage'
 import { SchedulePlanPage }     from '../../pages/SchedulePlanPage'
 import { ShortageRecoveryPage } from '../../pages/ShortageRecoveryPage'
+import { AuditLogPage }         from '../../pages/AuditLogPage'
 import './AppLayout.css'
 
 interface AppLayoutProps {
@@ -90,6 +91,8 @@ export function AppLayout({ theme, toggleTheme }: AppLayoutProps) {
             <SchedulePlanPage onNavigate={handleNavigate} />
           ) : currentPage === 'shortage-recovery' ? (
             <ShortageRecoveryPage onNavigate={handleNavigate} />
+          ) : currentPage === 'audit-log' ? (
+            <AuditLogPage onNavigate={handleNavigate} />
           ) : (
             <PlaceholderPage navItem={activeItem} />
           )}

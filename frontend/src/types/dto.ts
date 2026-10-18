@@ -438,9 +438,29 @@ export interface AuditLogDTO {
 
 export type AuditListResponseDTO = ApiListResponseDTO<AuditLogDTO>
 
+/** Proposed undo action payload returned by POST /api/audit/{id}/undo (Rest_API_Spec.md §3.15) */
+export interface AuditUndoActionDTO {
+  readonly id: string
+  readonly group_id: string
+  /**
+   * Option number to confirm at approval.
+   * NOTE: Optional here because the REST API specification text does not explicitly guarantee
+   * option_number across all response shapes, although the example shows option_number: 1.
+   */
+  readonly option_number?: number
+  readonly action_type: 'undo' | ActionTypeDTO
+  readonly title: string
+  readonly status: ActionStatusDTO
+  readonly undo_of_audit_id?: string | null
+  readonly base_plan_version?: number
+  readonly expires_at: string // ISO 8601 with offset
+  readonly impact?: ActionImpactDTO | null
+  readonly created_at?: string // ISO 8601 with offset
+}
+
 /** Response shape for POST /api/audit/{id}/undo (Rest_API_Spec.md §3.15) */
 export interface AuditUndoResponseDTO {
-  readonly action: ProposedActionDTO
+  readonly action: AuditUndoActionDTO
 }
 
 /* ── 8. Ingredients Stock Contract (Rest_API_Spec.md §3.2) ──── */
