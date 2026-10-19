@@ -20,6 +20,8 @@ import { OverviewPage }         from '../../pages/OverviewPage'
 import { LiveOperationsPage }   from '../../pages/LiveOperationsPage'
 import { SchedulePlanPage }     from '../../pages/SchedulePlanPage'
 import { ShortageRecoveryPage } from '../../pages/ShortageRecoveryPage'
+import { OrdersPage }           from '../../pages/OrdersPage'
+import { MenuPricingPage }      from '../../pages/MenuPricingPage'
 import { AuditLogPage }         from '../../pages/AuditLogPage'
 import './AppLayout.css'
 
@@ -124,6 +126,10 @@ export function AppLayout({ theme, toggleTheme }: AppLayoutProps) {
             <SchedulePlanPage onNavigate={handleNavigate} />
           ) : currentPage === 'shortage-recovery' ? (
             <ShortageRecoveryPage onNavigate={handleNavigate} />
+          ) : currentPage === 'orders' ? (
+            <OrdersPage onNavigate={handleNavigate} />
+          ) : currentPage === 'menu-pricing' ? (
+            <MenuPricingPage onNavigate={handleNavigate} />
           ) : currentPage === 'audit-log' ? (
             <AuditLogPage onNavigate={handleNavigate} />
           ) : (

@@ -1,0 +1,196 @@
+/* ============================================================
+   frontend/src/components/menuPricing/MenuFilterToolbar.css
+   OperAI / Cloud Kitchen Rescue — Menu Filter Toolbar Styles
+   ============================================================ */
+
+.menu-toolbar {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-bottom: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  box-shadow: var(--shadow-sm);
+}
+
+.menu-toolbar__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.menu-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 260px;
+}
+
+.menu-search-icon {
+  position: absolute;
+  left: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-text-placeholder);
+  pointer-events: none;
+}
+
+.menu-search-input {
+  width: 100%;
+  padding: var(--space-2) var(--space-8) var(--space-2) var(--space-8);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-background);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.menu-search-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.menu-search-clear-btn {
+  position: absolute;
+  right: var(--space-2);
+  background: transparent;
+  border: none;
+  color: var(--color-text-placeholder);
+  cursor: pointer;
+  padding: var(--space-1);
+  font-size: var(--text-xs);
+}
+
+.menu-margin-tabs {
+  display: flex;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  gap: 2px;
+  overflow-x: auto;
+}
+
+.menu-tab-btn {
+  background: transparent;
+  border: none;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
+}
+
+.menu-tab-btn:hover {
+  color: var(--color-text-primary);
+}
+
+.menu-tab-btn--active {
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-weight: var(--weight-semibold);
+  box-shadow: var(--shadow-sm);
+}
+
+.menu-toolbar__bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.menu-toolbar__controls-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.menu-select-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.menu-control-label {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.menu-select {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-background);
+  color: var(--color-text-primary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.menu-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.menu-sort-dir-btn {
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-weight: var(--weight-medium);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.menu-sort-dir-btn:hover {
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+}
+
+.menu-toolbar__actions-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.menu-count-badge {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+.menu-refresh-btn {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.menu-refresh-btn:hover:not(:disabled) {
+  background: var(--color-surface-secondary);
+}
+
+.menu-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

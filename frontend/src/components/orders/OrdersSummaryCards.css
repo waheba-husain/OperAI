@@ -1,0 +1,85 @@
+/* ============================================================
+   frontend/src/components/orders/OrdersSummaryCards.css
+   OperAI / Cloud Kitchen Rescue — Orders Summary Cards
+   ============================================================ */
+
+.orders-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.orders-summary-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.orders-summary-card:hover {
+  border-color: var(--color-border-strong);
+}
+
+.orders-summary-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.orders-summary-card__kicker {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+}
+
+.orders-summary-card__icon {
+  font-size: var(--text-md);
+  line-height: 1;
+}
+
+.orders-summary-card__val {
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-bold);
+  color: var(--color-text-primary);
+  line-height: var(--leading-tight);
+}
+
+.orders-summary-card__val--primary {
+  color: var(--color-primary);
+}
+
+.orders-summary-card__val--success {
+  color: var(--color-success);
+}
+
+.orders-summary-card__val--danger {
+  color: var(--color-danger);
+}
+
+.orders-summary-card__val--warning {
+  color: var(--color-warning);
+}
+
+.orders-summary-card__val--info {
+  color: var(--color-info);
+}
+
+.orders-summary-card__desc {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  margin-top: var(--space-1);
+}
+
+@media (max-width: 640px) {
+  .orders-summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

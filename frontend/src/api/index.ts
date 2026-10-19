@@ -12,6 +12,7 @@ export { ApiError, ConfigurationError, NetworkError } from './errors'
 
 // Typed Endpoint Helpers
 export {
+  analyzePricing,
   approveAction,
   chatAgent,
   getActions,
@@ -39,11 +40,21 @@ export type {
 export {
   adaptOrdersToLiveOrders,
   adaptOrderToLiveOrder,
+  adaptOrderToLiveOpsQueue,
+  adaptOrdersToLiveOpsQueue,
+  adaptOrderToViewModel,
+  adaptOrdersToViewModels,
+  calculateDeadlineStatus,
   calculateOrderUrgency,
   CHANNEL_DISPLAY_MAP,
+  deriveOrdersSummary,
+  formatCurrency,
   formatDateIST,
+  formatDeadlineDateIST,
+  formatDueLabel,
   formatTimeIST,
-  mapOrderStatus
+  mapOrderStatus,
+  STATUS_DISPLAY_MAP
 } from './adapters/orderAdapter'
 
 export {
@@ -110,3 +121,14 @@ export {
   mapPlanVersionTransition,
   resolveUndoOptionNumberFromActions
 } from './adapters/auditAdapter'
+
+export {
+  adaptCostBreakdown,
+  adaptMenuItemToViewModel,
+  adaptMenuItemsToViewModels,
+  adaptPricingAnalysisToViewModel,
+  calculateSimulatedPricingAnalysis,
+  deriveMenuSummary,
+  formatMarginStatusLabel,
+  MARGIN_STATUS_DISPLAY_MAP
+} from './adapters/menuAdapter'

@@ -98,14 +98,16 @@ export function deriveOverviewKpis(data: KpiSourceData): KpiItem[] {
   }
 
   // 3. Average Catalog Dish Margin
-  const activeDishes = menuItems.filter((i) => i.is_active)
+  const analyzedActiveDishes = menuItems.filter((i) => i.is_active && i.margin_pct !== undefined)
   let avgMarginText = '—'
   let marginSupporting = 'Catalog data pending'
 
-  if (activeDishes.length > 0) {
-    const avgMargin = activeDishes.reduce((sum, item) => sum + item.margin_pct, 0) / activeDishes.length
+  if (analyzedActiveDishes.length > 0) {
+    const avgMargin =
+      analyzedActiveDishes.reduce((sum, item) => sum + (item.margin_pct ?? 0), 0) /
+      analyzedActiveDishes.length
     avgMarginText = `${avgMargin.toFixed(1)}%`
-    marginSupporting = `Unweighted dish margin across ${activeDishes.length} active menu items`
+    marginSupporting = `Unweighted dish margin across ${analyzedActiveDishes.length} active menu items`
   }
 
   const marginKpi: KpiItem = {

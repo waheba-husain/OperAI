@@ -1,0 +1,362 @@
+/* ============================================================
+   frontend/src/components/orders/OrderDetailModal.css
+   OperAI / Cloud Kitchen Rescue — Order Detail Modal Styles
+   ============================================================ */
+
+.order-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(23, 61, 50, 0.45);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  z-index: 1000;
+  animation: order-modal-fade-in 0.2s ease-out;
+}
+
+@keyframes order-modal-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.order-modal-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  width: 100%;
+  max-width: 640px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+  animation: order-modal-pop-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes order-modal-pop-in {
+  from {
+    transform: scale(0.96) translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+.order-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-background);
+}
+
+.order-modal-header__info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.order-modal-ref-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.order-modal-ref {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  color: var(--color-text-primary);
+}
+
+.order-modal-channel-tag {
+  background: var(--color-surface-secondary);
+  color: var(--color-text-secondary);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+}
+
+.order-modal-source-tag {
+  background: #FFF3CD;
+  color: #856404;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+
+.order-modal-source-tag--live {
+  background: #D4EDDA;
+  color: #155724;
+}
+
+.order-modal-title {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.order-modal-close-btn {
+  background: transparent;
+  border: none;
+  font-size: var(--text-lg);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.order-modal-close-btn:hover {
+  background: var(--color-border);
+  color: var(--color-text-primary);
+}
+
+.order-modal-body {
+  padding: var(--space-5);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.order-modal-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+}
+
+.order-modal-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.order-modal-meta-label {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  font-weight: var(--weight-medium);
+}
+
+.order-modal-meta-val {
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  font-weight: var(--weight-semibold);
+}
+
+.order-modal-meta-val--attention {
+  color: var(--color-danger);
+}
+
+.order-modal-mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  word-break: break-all;
+}
+
+.order-modal-section-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  color: var(--color-text-primary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  margin: 0 0 var(--space-2) 0;
+}
+
+.order-modal-table-wrap {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.order-modal-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.order-modal-table th {
+  background: var(--color-background);
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.order-modal-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border-subtle);
+  color: var(--color-text-primary);
+}
+
+.order-modal-dish-cell {
+  display: flex;
+  flex-direction: column;
+}
+
+.order-modal-dish-name {
+  font-weight: var(--weight-medium);
+}
+
+.order-modal-dish-id {
+  font-size: var(--text-xs);
+  color: var(--color-text-placeholder);
+  font-family: var(--font-mono);
+}
+
+.text-right {
+  text-align: right;
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.font-semibold {
+  font-weight: var(--weight-semibold);
+}
+
+.order-modal-total-row td {
+  background: var(--color-background);
+  border-top: 2px solid var(--color-border);
+  border-bottom: none;
+  padding: var(--space-3);
+}
+
+.order-modal-total-label {
+  font-weight: var(--weight-bold);
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+}
+
+.order-modal-total-val {
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  color: var(--color-primary);
+}
+
+.order-modal-whatsapp-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: #EBF8F2;
+  border: 1px solid #C2EAD6;
+  border-radius: var(--radius-md);
+}
+
+.order-modal-whatsapp-text strong {
+  display: block;
+  font-size: var(--text-xs);
+  color: #128C7E;
+}
+
+.order-modal-whatsapp-text p {
+  margin: 2px 0 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+.order-modal-whatsapp-link {
+  display: inline-block;
+  padding: var(--space-2) var(--space-3);
+  background: #128C7E;
+  color: #FFFFFF;
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.order-modal-whatsapp-link:hover {
+  background: #0E7064;
+}
+
+.order-modal-channel-note {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  background: var(--color-background);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+.order-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-background);
+}
+
+.order-modal-footer-hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+.order-modal-footer-hint kbd {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.order-modal-close-action-btn {
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.order-modal-close-action-btn:hover {
+  background: var(--color-surface-secondary);
+  border-color: var(--color-border-strong);
+}
+
+@media (max-width: 600px) {
+  .order-modal-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .order-modal-whatsapp-box {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .order-modal-whatsapp-link {
+    text-align: center;
+  }
+}

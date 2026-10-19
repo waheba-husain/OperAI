@@ -1,0 +1,240 @@
+/* ============================================================
+   frontend/src/pages/MenuPricingPage.css
+   OperAI / Cloud Kitchen Rescue — Menu & Pricing Page Styles
+   ============================================================ */
+
+.menu-page {
+  padding: var(--space-6);
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* ── Header ─────────────────────────────────────────────── */
+.menu-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.menu-header__left {
+  flex: 1;
+  min-width: 280px;
+}
+
+.menu-header__kicker-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.menu-header__kicker {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  color: var(--color-primary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.menu-header__badge {
+  background: var(--color-surface-secondary);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-weight: var(--weight-medium);
+}
+
+.menu-header__title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.menu-header__title-icon {
+  color: var(--color-primary);
+}
+
+.menu-header__title {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  color: var(--color-text-primary);
+  margin: 0;
+  line-height: var(--leading-tight);
+}
+
+.menu-header__subtitle {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  max-width: 650px;
+  margin: 0;
+  line-height: var(--leading-relaxed);
+}
+
+.menu-header__right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+.menu-header__target-pill {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: #F0FDF4;
+  border: 1px solid #BBF7D0;
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: #166534;
+}
+
+.menu-header__target-icon {
+  color: #16A34A;
+}
+
+.menu-header__live-pill,
+.menu-header__demo-pill {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+}
+
+.menu-header__live-pill {
+  background: #ECFDF5;
+  border: 1px solid #A7F3D0;
+  color: #065F46;
+}
+
+.menu-header__live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10B981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+.menu-header__live-hint,
+.menu-header__demo-hint {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.menu-header__demo-pill {
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
+  color: #92400E;
+}
+
+.menu-header__demo-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #F59E0B;
+}
+
+.menu-mode-btn {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.menu-mode-btn:hover {
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  border-color: var(--color-primary);
+}
+
+.menu-header__snapshot-time {
+  font-size: 11px;
+  color: var(--color-text-placeholder);
+}
+
+/* ── Banners ─────────────────────────────────────────────── */
+.menu-banner {
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-6);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.menu-banner__content {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+}
+
+.menu-banner--info {
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  color: #1E40AF;
+}
+
+.menu-banner--info code {
+  background: rgba(255, 255, 255, 0.8);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+}
+
+.menu-banner--error {
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  color: #991B1B;
+}
+
+.menu-banner__error-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.menu-banner__retry-btn {
+  background: #DC2626;
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.menu-banner__retry-btn:disabled {
+  opacity: 0.6;
+}
+
+@media (max-width: 768px) {
+  .menu-page {
+    padding: var(--space-4);
+  }
+
+  .menu-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .menu-header__right {
+    align-items: flex-start;
+  }
+}

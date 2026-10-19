@@ -15,8 +15,14 @@
    5. DO NOT treat deadline as creation timestamp.
    ============================================================ */
 
-import type { OrderChannelDTO, OrderDTO, OrderStatusDTO } from '../../types/dto'
+import type { DataSourceDTO, OrderChannelDTO, OrderDTO, OrderStatusDTO } from '../../types/dto'
 import type { LiveOrder, OrderItem, OrderStatus, OrderUrgency } from '../../types/liveOperations'
+import type {
+  OrderDeadlineStatus,
+  OrderItemViewModel,
+  OrderViewModel,
+  OrdersSummaryMetrics
+} from '../../types/orders'
 
 export const CHANNEL_DISPLAY_MAP: Record<OrderChannelDTO, string> = {
   whatsapp: 'WhatsApp',
@@ -250,5 +256,219 @@ export function adaptOrdersToLiveOpsQueue(orders: readonly OrderDTO[], now: Date
   return orders
     .map((order) => adaptOrderToLiveOpsQueue(order, now))
     .filter((order): order is LiveOrder => order !== null)
+}
+
+/* ── Order View-Model Adapters for the Orders Page ──────────── */
+
+export const STATUS_DISPLAY_MAP: Record<OrderStatusDTO, string> = {
+  new: 'New',
+  planned: 'Planned',
+  in_progress: 'In Prep',
+  delayed: 'Delayed',
+  partial: 'Partial',
+  completed: 'Completed',
+  cancelled: 'Cancelled'
+}
+
+/**
+ * Formats a currency amount into Indian Rupees (e.g. "₹360.00").
+ */
+export function formatCurrency(amount: number): string {
+  if (isNaN(amount)) return '₹0.00'
+  return `₹${amount.toFixed(2)}`
+}
+
+/**
+ * Formats an ISO 8601 timestamp with offset into IST date string (e.g. "17 Oct 2026").
+ */
+export function formatDeadlineDateIST(isoString: string): string {
+  try {
+    const date = new Date(isoString)
+    if (isNaN(date.getTime())) return '—'
+    return new Intl.DateTimeFormat('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'Asia/Kolkata'
+    }).format(date)
+  } catch {
+    return '—'
+  }
+}
+/**
+ * Evaluates the deadline urgency status for an order.
+ * CRITICAL RULES:
+ * 1. Completed and cancelled orders are always 'normal' (never receive overdue indicators).
+ * 2. Future deadlines (minutesUntilDue >= 0) are NEVER 'overdue', even if status is 'delayed'.
+ *    'delayed' is an operational bottleneck status, not a past deadline.
+ * 3. An order is 'overdue' ONLY if minutesUntilDue < 0 and the order is active.
+ * 4. An order is 'due-soon' if 0 <= minutesUntilDue <= 15 and the order is active.
+ */
+export function calculateDeadlineStatus(minutesUntilDue: number, status: OrderStatusDTO): OrderDeadlineStatus {
+  if (status === 'completed' || status === 'cancelled') {
+    return 'normal'
+  }
+  if (minutesUntilDue < 0) {
+    return 'overdue'
+  }
+  if (minutesUntilDue <= 15) {
+    return 'due-soon'
+  }
+  return 'normal'
+}
+
+/**
+ * Formats relative deadline delta into a concise, human-friendly label.
+ * Completed and cancelled orders are explicitly marked and never labeled overdue.
+ *
+ * For overdue active orders:
+ * - Under 60m: e.g. "5m overdue"
+ * - 60m or more: e.g. "2h overdue", "2h 30m overdue"
+ *
+ * For future active orders:
+ * - 0m: "Due now"
+ * - Under 60m: e.g. "In 5m"
+ * - 60m or more: e.g. "In 2h", "In 2h 30m"
+ */
+export function formatDueLabel(minutesUntilDue: number, status: OrderStatusDTO | string): string {
+  if (status === 'completed') return 'Fulfilled'
+  if (status === 'cancelled') return 'Cancelled'
+
+  if (minutesUntilDue < 0) {
+    const absMins = Math.abs(minutesUntilDue)
+    if (absMins < 60) {
+      return `${absMins}m overdue`
+    }
+    const hours = Math.floor(absMins / 60)
+    const remainingMins = absMins % 60
+    return remainingMins > 0 ? `${hours}h ${remainingMins}m overdue` : `${hours}h overdue`
+  }
+
+  if (minutesUntilDue === 0) return 'Due now'
+
+  if (minutesUntilDue <= 60) {
+    return `In ${minutesUntilDue}m`
+  }
+
+  const hours = Math.floor(minutesUntilDue / 60)
+  const remainingMins = minutesUntilDue % 60
+  return remainingMins > 0 ? `In ${hours}h ${remainingMins}m` : `In ${hours}h`
+}
+
+/**
+ * Transforms an OrderDTO into a comprehensive OrderViewModel for the Orders page.
+ */
+export function adaptOrderToViewModel(
+  order: OrderDTO,
+  dataSource: DataSourceDTO = 'verified',
+  now: Date = new Date()
+): OrderViewModel {
+  const deadlineDate = new Date(order.deadline)
+  const isInvalidDate = isNaN(deadlineDate.getTime())
+  const minutesUntilDue = isInvalidDate
+    ? 0
+    : Math.round((deadlineDate.getTime() - now.getTime()) / 60000)
+
+  const deadlineStatus = isInvalidDate
+    ? 'normal'
+    : calculateDeadlineStatus(minutesUntilDue, order.status)
+
+  const items: OrderItemViewModel[] = (order.items ?? []).map((item) => {
+    const subtotal = Number((item.quantity * item.unit_price).toFixed(2))
+    return {
+      menuItemId: item.menu_item_id,
+      name: item.name,
+      quantity: item.quantity,
+      unitPrice: item.unit_price,
+      formattedUnitPrice: formatCurrency(item.unit_price),
+      subtotal,
+      formattedSubtotal: formatCurrency(subtotal)
+    }
+  })
+
+  const itemsCount = items.reduce((acc, curr) => acc + curr.quantity, 0)
+  const totalAmount = Number(order.total_amount)
+
+  return {
+    id: order.id,
+    ref: `#ORD-${order.id.slice(0, 4).toUpperCase()}`,
+    customerName: order.customer_name,
+    customerPhone: (order as unknown as { customer_phone?: string }).customer_phone,
+    channel: order.channel,
+    channelLabel: CHANNEL_DISPLAY_MAP[order.channel] ?? order.channel,
+    deadline: order.deadline,
+    formattedDeadlineTime: isInvalidDate ? '—' : formatTimeIST(order.deadline),
+    formattedDeadlineDate: isInvalidDate ? '—' : formatDeadlineDateIST(order.deadline),
+    minutesUntilDue,
+    deadlineStatus,
+    status: order.status,
+    statusLabel: STATUS_DISPLAY_MAP[order.status] ?? order.status,
+    totalAmount,
+    formattedTotalAmount: formatCurrency(totalAmount),
+    itemsCount,
+    items,
+    dataSource
+  }
+}
+
+/**
+ * Transforms an array of OrderDTOs into OrderViewModels for the Orders page.
+ */
+export function adaptOrdersToViewModels(
+  orders: readonly OrderDTO[],
+  dataSource: DataSourceDTO = 'verified',
+  now: Date = new Date()
+): OrderViewModel[] {
+  return orders.map((o) => adaptOrderToViewModel(o, dataSource, now))
+}
+
+/**
+ * Derives operational and financial summary metrics from a set of order view models.
+ * All computations are deterministic code per AGENTS.md Rule 1.
+ */
+export function deriveOrdersSummary(orders: readonly OrderViewModel[]): OrdersSummaryMetrics {
+  let activeOrders = 0
+  let completedOrders = 0
+  let delayedOrders = 0
+  let cancelledOrders = 0
+  let totalRevenue = 0
+
+  const channelBreakdown: Record<OrderChannelDTO, number> = {
+    whatsapp: 0,
+    instagram: 0,
+    swiggy: 0,
+    zomato: 0,
+    direct: 0
+  }
+
+  for (const order of orders) {
+    if (order.status === 'completed') {
+      completedOrders += 1
+      totalRevenue += order.totalAmount
+    } else if (order.status === 'cancelled') {
+      cancelledOrders += 1
+    } else {
+      activeOrders += 1
+      totalRevenue += order.totalAmount
+      if (order.status === 'delayed' || order.deadlineStatus === 'overdue') {
+        delayedOrders += 1
+      }
+    }
+
+    if (channelBreakdown[order.channel] !== undefined) {
+      channelBreakdown[order.channel] += 1
+    }
+  }
+
+  return {
+    totalOrders: orders.length,
+    activeOrders,
+    completedOrders,
+    delayedOrders,
+    cancelledOrders,
+    totalRevenue: Number(totalRevenue.toFixed(2)),
+    formattedTotalRevenue: formatCurrency(totalRevenue),
+    channelBreakdown
+  }
 }
 

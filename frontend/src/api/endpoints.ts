@@ -26,6 +26,8 @@ import type {
   OrderListResponseDTO,
   OrderStatusDTO,
   PlanResponseDTO,
+  PricingAnalysisResponseDTO,
+  PricingAnalyzeRequestDTO,
   RecoveryProposeRequestDTO,
   RecoveryProposeResponseDTO
 } from '../types/dto.ts'
@@ -148,6 +150,18 @@ export async function getMenu(
 ): Promise<MenuListResponseDTO> {
   const client = options?.client ?? defaultClient
   return client.get<MenuListResponseDTO>('/api/menu', undefined, { signal: options?.signal })
+}
+
+/**
+ * Analyze dish pricing and calculate suggested price from target margin (Rest_API_Spec.md §3.4).
+ * What-if pricing simulation without altering menu catalog prices.
+ */
+export async function analyzePricing(
+  data: PricingAnalyzeRequestDTO,
+  options?: { signal?: AbortSignal; client?: ApiClient }
+): Promise<PricingAnalysisResponseDTO> {
+  const client = options?.client ?? defaultClient
+  return client.post<PricingAnalysisResponseDTO>('/api/pricing/analyze', data, { signal: options?.signal })
 }
 
 /* ── 6. Day-End Summary (Rest_API_Spec.md §3.17) ───────────── */

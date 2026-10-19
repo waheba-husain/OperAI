@@ -239,12 +239,12 @@ export interface MenuItemDTO {
   readonly id: string
   readonly name: string
   readonly price: number
-  readonly cost_breakdown: CostBreakdownDTO
-  readonly profit_per_order: number
-  readonly margin_pct: number
-  readonly margin_status: MarginStatusDTO
-  readonly is_active: boolean
-  readonly data_source: DataSourceDTO
+  readonly cost_breakdown?: CostBreakdownDTO
+  readonly profit_per_order?: number
+  readonly margin_pct?: number
+  readonly margin_status?: MarginStatusDTO
+  readonly is_active?: boolean
+  readonly data_source?: DataSourceDTO
 }
 
 export type MenuListResponseDTO = ApiListResponseDTO<MenuItemDTO>
@@ -255,6 +255,13 @@ export interface PricingAnalysisAssumptionsDTO {
   readonly overhead_pct: number
   readonly target_margin_pct: number
   readonly data_source: DataSourceDTO
+}
+
+/** Request payload for POST /api/pricing/analyze (Rest_API_Spec.md §3.4) */
+export interface PricingAnalyzeRequestDTO {
+  readonly menu_item_id: string
+  readonly price?: number
+  readonly propose_change?: boolean
 }
 
 /** Response shape for POST /api/pricing/analyze (Rest_API_Spec.md §3.4) */
