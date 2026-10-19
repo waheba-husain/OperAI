@@ -46,7 +46,7 @@ function shiftDate(dateStr: string, deltaDays: number): string {
   }
 }
 
-export function SchedulePlanPage({ onNavigate: _onNavigate, dataOptions }: SchedulePlanPageProps) {
+export function SchedulePlanPage({ dataOptions }: SchedulePlanPageProps) {
   const {
     mode,
     isLive,

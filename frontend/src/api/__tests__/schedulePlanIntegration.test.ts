@@ -26,13 +26,11 @@ import assert from 'node:assert/strict'
 
 import { ApiClient } from '../client.ts'
 import { ApiError } from '../errors.ts'
-import { getPlan, getOrders } from '../endpoints.ts'
+import { getPlan } from '../endpoints.ts'
 import {
   adaptPlanTaskToScheduleItem,
   adaptPlanTasksToScheduleItems,
-  deriveSchedulePlanSummary,
-  deriveWorkstationLabel,
-  calculateDurationMins
+  deriveSchedulePlanSummary
 } from '../adapters/planAdapter.ts'
 import { formatDateIST, formatTimeIST } from '../adapters/orderAdapter.ts'
 

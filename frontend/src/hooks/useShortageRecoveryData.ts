@@ -279,8 +279,10 @@ export function useShortageRecoveryData(
 
   // Load initial brief and pending actions
   useEffect(() => {
-    fetchBrief()
-    fetchPendingActions()
+    const run = async () => {
+      await Promise.all([fetchBrief(), fetchPendingActions()])
+    }
+    void run()
 
     return () => {
       if (briefAbortRef.current) briefAbortRef.current.abort()
@@ -288,12 +290,20 @@ export function useShortageRecoveryData(
     }
   }, [fetchBrief, fetchPendingActions])
 
-  // Clear proposal when switching dates or mode
-  useEffect(() => {
-    proposalSeqRef.current++
+  const [prevTargetDate, setPrevTargetDate] = useState(targetDate)
+  const [prevMode, setPrevMode] = useState(mode)
+
+  if (prevTargetDate !== targetDate || prevMode !== mode) {
+    setPrevTargetDate(targetDate)
+    setPrevMode(mode)
     setLiveProposal(null)
     setProposalError(null)
     setActionMutationError(null)
+  }
+
+  // Clear in-flight proposals when switching dates or mode
+  useEffect(() => {
+    proposalSeqRef.current++
   }, [targetDate, mode])
 
   // Request recovery options (POST /api/recovery/propose)

@@ -227,7 +227,10 @@ export function useOverviewData(options?: UseOverviewDataOptions): OverviewDataR
   }, [mode, targetDate, activeClient])
 
   useEffect(() => {
-    fetchData()
+    const run = async () => {
+      await fetchData()
+    }
+    void run()
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()

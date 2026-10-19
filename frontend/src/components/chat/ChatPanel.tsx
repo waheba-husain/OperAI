@@ -42,23 +42,25 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const lastSpokenTranscriptRef = useRef<string>('')
 
+  const transcript = voice?.transcript
+  const { applyVoiceTranscript } = chatData
+
   // Synchronize incoming speech recognition transcript to user draft buffer
   useEffect(() => {
-    if (!voice || !voice.isListening) return
+    if (!transcript) return
 
-    const currentTranscript = voice.transcript
-    if (currentTranscript && currentTranscript !== lastSpokenTranscriptRef.current) {
-      lastSpokenTranscriptRef.current = currentTranscript
-      chatData.applyVoiceTranscript(currentTranscript, 'replace')
+    if (transcript !== lastSpokenTranscriptRef.current) {
+      lastSpokenTranscriptRef.current = transcript
+      applyVoiceTranscript(transcript, 'replace')
     }
-  }, [voice?.transcript, voice?.isListening, chatData])
+  }, [transcript, applyVoiceTranscript])
 
-  // Reset tracking when listening completes
+  // Reset tracking when transcript is cleared
   useEffect(() => {
-    if (voice && !voice.isListening) {
+    if (!transcript) {
       lastSpokenTranscriptRef.current = ''
     }
-  }, [voice?.isListening])
+  }, [transcript])
 
   const handleStartListening = () => {
     if (!voice) return

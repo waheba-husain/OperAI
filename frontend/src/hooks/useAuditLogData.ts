@@ -261,7 +261,10 @@ export function useAuditLogData(options?: UseAuditLogDataOptions): AuditLogDataR
   // Initial & Filter-Triggered Fetch
   useEffect(() => {
     if (options?.autoFetch !== false) {
-      void fetchAudit()
+      const run = async () => {
+        await fetchAudit()
+      }
+      void run()
     }
     return () => {
       if (abortControllerRef.current) {

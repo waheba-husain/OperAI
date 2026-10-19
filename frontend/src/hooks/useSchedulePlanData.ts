@@ -192,7 +192,10 @@ export function useSchedulePlanData(options?: UseSchedulePlanDataOptions): Sched
   }, [mode, targetDate, activeClient])
 
   useEffect(() => {
-    fetchData()
+    const run = async () => {
+      await fetchData()
+    }
+    void run()
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()

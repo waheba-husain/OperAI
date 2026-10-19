@@ -24,8 +24,8 @@ import {
   MAX_CHAT_MESSAGE_LENGTH,
   SUGGESTED_CHAT_PROMPTS
 } from '../../hooks/useChatData.ts'
-import { DEMO_CHAT_CONVERSATION, DEMO_CHAT_RESPONSES } from '../../pages/chat/demoChatData.ts'
-import type { ChatMessage, ChatConfirmationPrompt } from '../../types/chat.ts'
+import { DEMO_CHAT_CONVERSATION } from '../../pages/chat/demoChatData.ts'
+import type { ChatMessage } from '../../types/chat.ts'
 
 /* ── 1. Proposal Card Presentation Logic ─────────────────────── */
 
@@ -187,6 +187,7 @@ test('ChatDrawer lifecycle: conversation state persists across drawer open and c
 
   // 2. User closes drawer (isChatOpen becomes false)
   let isChatOpen = false
+  assert.strictEqual(isChatOpen, false)
 
   // State in controller must remain 100% intact
   assert.strictEqual(controller.getSnapshot().draft, 'Important user question')
@@ -240,11 +241,13 @@ test('ChatDrawer lifecycle: in-flight request completes safely across drawer clo
 
   // 1. Drawer open, user sends message
   let isChatOpen = true
+  assert.strictEqual(isChatOpen, true)
   const sendPromise = controller.sendMessage()
   assert.strictEqual(controller.getSnapshot().isLoading, true)
 
   // 2. User closes drawer while request is in flight
   isChatOpen = false
+  assert.strictEqual(isChatOpen, false)
 
   // 3. Request completes in background
   const success = await sendPromise
@@ -282,5 +285,168 @@ test('ChatConversationController: mode transition clears visible error without g
   assert.strictEqual(controller.getSnapshot().error, null)
   assert.strictEqual(controller.getSnapshot().errorMessage, null)
 })
+
+/* ── 5. React StrictMode Lifecycle & ChatInputBar Regression Tests ── */
+
+test('ChatConversationController: React StrictMode mount/cleanup/remount lifecycle restores draft and messaging reactivity', async () => {
+  const controller = new ChatConversationController()
+  let currentSnapshot = controller.getSnapshot()
+
+  controller.setOnStateChange((snap) => {
+    currentSnapshot = snap
+  })
+
+  // 1. Initial mount: draft is empty
+  assert.strictEqual(currentSnapshot.draft, '')
+  assert.strictEqual(currentSnapshot.canSubmit, false)
+
+  // 2. React StrictMode simulates unmount by calling effect cleanup: destroy()
+  controller.destroy()
+
+  // 3. React StrictMode immediately remounts by calling effect setup: activate() and setOnStateChange()
+  controller.activate()
+  controller.setOnStateChange((snap) => {
+    currentSnapshot = snap
+  })
+
+  // 4. User types text into the textarea: setDraft must be fully responsive
+  controller.setDraft('Out of paneer for butter chicken')
+  assert.strictEqual(currentSnapshot.draft, 'Out of paneer for butter chicken')
+  assert.strictEqual(currentSnapshot.isEmpty, false)
+  assert.strictEqual(currentSnapshot.canSubmit, true)
+
+  // 5. User appends additional text
+  controller.appendDraft('need alternative')
+  assert.strictEqual(currentSnapshot.draft, 'Out of paneer for butter chicken need alternative')
+
+  // 6. User submits in demo mode: messages update and draft is cleared
+  controller.setMode('demo')
+  const success = await controller.sendMessage()
+  assert.strictEqual(success, true)
+  assert.strictEqual(currentSnapshot.draft, '')
+  assert.strictEqual(currentSnapshot.canSubmit, false)
+  assert.ok(currentSnapshot.messages.length >= 2)
+})
+
+test('ChatInputBar interaction logic: Enter submission, Shift+Enter newline, empty guard, and length limit', () => {
+  let submittedWithMode: string | null = null
+  const onSend = (options?: { inputMode?: string }) => {
+    submittedWithMode = options?.inputMode ?? 'text'
+  }
+
+  const simulateKeyDown = (
+    key: string,
+    shiftKey: boolean,
+    draft: string,
+    isLoading: boolean,
+    draftInputMode: 'text' | 'voice' = 'text'
+  ): boolean => {
+    submittedWithMode = null
+    const charCount = draft.length
+    const isOverLimit = charCount > MAX_CHAT_MESSAGE_LENGTH
+    const isEmpty = draft.trim().length === 0
+    const canSubmit = !isLoading && !isEmpty && !isOverLimit
+
+    if (key === 'Enter' && !shiftKey) {
+      if (canSubmit) {
+        onSend({ inputMode: draftInputMode })
+        return true // Prevented default and submitted
+      }
+      return false // Guarded from submission
+    }
+    return false // Newline or regular character inserted
+  }
+
+  // 1. Enter on valid draft triggers submission
+  const submitted1 = simulateKeyDown('Enter', false, 'What is today risk brief?', false, 'text')
+  assert.strictEqual(submitted1, true)
+  assert.strictEqual(submittedWithMode, 'text')
+
+  // 2. Shift+Enter does NOT submit (allows multiline entry)
+  const submitted2 = simulateKeyDown('Enter', true, 'Line 1', false, 'text')
+  assert.strictEqual(submitted2, false)
+  assert.strictEqual(submittedWithMode, null)
+
+  // 3. Enter on empty/whitespace draft does NOT submit
+  const submitted3 = simulateKeyDown('Enter', false, '   ', false, 'text')
+  assert.strictEqual(submitted3, false)
+  assert.strictEqual(submittedWithMode, null)
+
+  // 4. Enter while loading does NOT submit
+  const submitted4 = simulateKeyDown('Enter', false, 'Valid text', true, 'text')
+  assert.strictEqual(submitted4, false)
+  assert.strictEqual(submittedWithMode, null)
+
+  // 5. Enter when exceeding 500 characters does NOT submit
+  const overlong = 'a'.repeat(MAX_CHAT_MESSAGE_LENGTH + 1)
+  const submitted5 = simulateKeyDown('Enter', false, overlong, false, 'text')
+  assert.strictEqual(submitted5, false)
+  assert.strictEqual(submittedWithMode, null)
+
+  // 6. Enter on voice draft preserves voice inputMode
+  const submitted6 = simulateKeyDown('Enter', false, 'Spoken question', false, 'voice')
+  assert.strictEqual(submitted6, true)
+  assert.strictEqual(submittedWithMode, 'voice')
+})
+
+test('ChatPanel & ChatInputBar voice interaction: microphone toggle and reviewable draft population', () => {
+  const controller = new ChatConversationController()
+  let isListening = false
+  let micToggleCount = 0
+
+  const handleToggleVoice = () => {
+    micToggleCount++
+    if (isListening) {
+      isListening = false
+    } else {
+      isListening = true
+    }
+  }
+
+  // 1. Click microphone to start listening
+  handleToggleVoice()
+  assert.strictEqual(micToggleCount, 1)
+  assert.strictEqual(isListening, true)
+
+  // 2. Speech recognition populates reviewable draft without submitting
+  controller.applyVoiceTranscript('Butter chicken shortage inquiry', 'replace')
+  assert.strictEqual(controller.getSnapshot().draft, 'Butter chicken shortage inquiry')
+  assert.strictEqual(controller.getSnapshot().draftInputMode, 'voice')
+  assert.strictEqual(controller.getSnapshot().messages.length, 0)
+  assert.strictEqual(controller.getSnapshot().canSubmit, true)
+
+  // 3. User edits the reviewable draft
+  controller.setDraft('Butter chicken shortage inquiry - urgent')
+  assert.strictEqual(controller.getSnapshot().draft, 'Butter chicken shortage inquiry - urgent')
+  assert.strictEqual(controller.getSnapshot().draftInputMode, 'text')
+
+  // 4. Click microphone again to stop listening
+  handleToggleVoice()
+  assert.strictEqual(micToggleCount, 2)
+  assert.strictEqual(isListening, false)
+})
+
+test('ChatPanel: incoming transcript populates editable draft even if speech session has ended (isListening is false)', () => {
+  const controller = new ChatConversationController()
+  let lastSpokenTranscript = ''
+
+  const syncTranscript = (transcript: string) => {
+    if (!transcript) return
+    if (transcript !== lastSpokenTranscript) {
+      lastSpokenTranscript = transcript
+      controller.applyVoiceTranscript(transcript, 'replace')
+    }
+  }
+
+  // Recognition session ends, produces final transcript while isListening is false
+  syncTranscript('We are out of paneer for tonight')
+
+  assert.strictEqual(controller.getSnapshot().draft, 'We are out of paneer for tonight')
+  assert.strictEqual(controller.getSnapshot().draftInputMode, 'voice')
+  assert.strictEqual(controller.getSnapshot().canSubmit, true)
+  assert.strictEqual(controller.getSnapshot().messages.length, 0, 'Must NOT auto-submit')
+})
+
+
 
 

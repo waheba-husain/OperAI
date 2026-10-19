@@ -36,7 +36,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import { ApiClient } from '../client.ts'
-import { ApiError, ConfigurationError } from '../errors.ts'
+import { ApiError } from '../errors.ts'
 import { approveAction, getAudit, undoAudit } from '../endpoints.ts'
 
 import type {
@@ -52,8 +52,6 @@ import {
   adaptAuditLogToViewModel,
   adaptSnapshotComparison,
   adaptUndoResponseToViewModel,
-  AUDIT_ACTOR_PRESENTATION_MAP,
-  AUDIT_EVENT_PRESENTATION_MAP,
   deriveAuditLogSummary,
   formatAuditTimestampIST,
   formatSnapshotValue,
@@ -1098,7 +1096,7 @@ test('Audit Hook Workflow: live API failure does NOT fall back to mock data', as
     fetchFn: mockFetch
   })
 
-  let liveLogs: unknown[] = []
+  let liveLogs: unknown[]
   let capturedError: unknown = null
 
   try {
@@ -1373,6 +1371,7 @@ test('Audit Hook Workflow: demo mode prevents live mutation requests', async () 
     apiKey: 'test-api-key',
     fetchFn: mockFetch
   })
+  void client
 
   const mode = 'demo'
 
@@ -1467,7 +1466,7 @@ test('Phase 4 UI Safety: approval success followed by subsequent refresh failure
 })
 
 test('Phase 4 UI Safety: approval failure from backend is NOT presented as success', async () => {
-  const mockFetch = async (input: RequestInfo | URL): Promise<Response> => {
+  const mockFetch = async (): Promise<Response> => {
     return new Response(
       JSON.stringify({
         error: {

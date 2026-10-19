@@ -32,7 +32,7 @@
       Duplicate submissions are prevented while a request is in flight.
    ============================================================ */
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import type { ApiClient } from '../api/client.ts'
 import { chatAgent } from '../api/endpoints.ts'
 import { ApiError, ConfigurationError, NetworkError } from '../api/errors.ts'
@@ -201,6 +201,25 @@ export class ChatConversationController {
 
   updateClient(client?: ApiClient): void {
     this.client = client
+  }
+
+  updateOptions(options?: UseChatDataOptions): void {
+    if (!options) return
+    this.client = options.client
+    this.onMessageSent = options.onMessageSent
+    this.onAssistantReply = options.onAssistantReply
+    this.onError = options.onError
+  }
+
+  activate(): void {
+    this.isDestroyed = false
+  }
+
+  setOnStateChange(handler?: (snapshot: ChatConversationSnapshot) => void): void {
+    this.onStateChange = handler
+    if (handler) {
+      this.isDestroyed = false
+    }
   }
 
   getSnapshot(): ChatConversationSnapshot {
@@ -639,79 +658,61 @@ export class ChatConversationController {
  * voice transcript review, and live/demo mode switching.
  */
 export function useChatData(options?: UseChatDataOptions): UseChatDataReturn {
-  const optionsRef = useRef(options)
-  optionsRef.current = options
-
-  const controllerRef = useRef<ChatConversationController | null>(null)
-
-  if (!controllerRef.current) {
-    controllerRef.current = new ChatConversationController({
-      ...options,
-      onStateChange: (snapshot) => {
-        setSnapshot(snapshot)
-      },
-      onMessageSent: (msg) => {
-        optionsRef.current?.onMessageSent?.(msg)
-      },
-      onAssistantReply: (msg) => {
-        optionsRef.current?.onAssistantReply?.(msg)
-      },
-      onError: (err) => {
-        optionsRef.current?.onError?.(err)
-      }
-    })
-  }
+  const [controller] = useState(() => {
+    return new ChatConversationController(options)
+  })
 
   const [snapshot, setSnapshot] = useState<ChatConversationSnapshot>(() =>
-    controllerRef.current!.getSnapshot()
+    controller.getSnapshot()
   )
 
   useEffect(() => {
-    controllerRef.current?.updateClient(options?.client)
-  }, [options?.client])
+    controller.activate()
+    return () => {
+      controller.destroy()
+    }
+  }, [controller])
 
   useEffect(() => {
-    return () => {
-      controllerRef.current?.destroy()
-      controllerRef.current = null
-    }
-  }, [])
+    controller.setOnStateChange(setSnapshot)
+    controller.updateOptions(options)
+  }, [controller, options])
 
   const setDraft = useCallback((text: string) => {
-    controllerRef.current?.setDraft(text)
-  }, [])
+    controller.setDraft(text)
+  }, [controller])
 
   const appendDraft = useCallback((text: string) => {
-    controllerRef.current?.appendDraft(text)
-  }, [])
+    controller.appendDraft(text)
+  }, [controller])
 
   const applyVoiceTranscript = useCallback((transcript: string, mode?: 'replace' | 'append') => {
-    controllerRef.current?.applyVoiceTranscript(transcript, mode)
-  }, [])
+    controller.applyVoiceTranscript(transcript, mode)
+  }, [controller])
 
   const clearDraft = useCallback(() => {
-    controllerRef.current?.clearDraft()
-  }, [])
+    controller.clearDraft()
+  }, [controller])
 
   const clearError = useCallback(() => {
-    controllerRef.current?.clearError()
-  }, [])
+    controller.clearError()
+  }, [controller])
 
   const clearConversation = useCallback(() => {
-    controllerRef.current?.clearConversation()
-  }, [])
+    controller.clearConversation()
+  }, [controller])
 
   const setMode = useCallback((mode: ChatMode) => {
-    controllerRef.current?.setMode(mode)
-  }, [])
+    controller.setMode(mode)
+  }, [controller])
 
   const sendMessage = useCallback((sendOptions?: SendMessageOptions) => {
-    return controllerRef.current ? controllerRef.current.sendMessage(sendOptions) : Promise.resolve(false)
-  }, [])
+    return controller.sendMessage(sendOptions)
+  }, [controller])
 
   const applySuggestedPrompt = useCallback((prompt: string) => {
-    controllerRef.current?.applySuggestedPrompt(prompt)
-  }, [])
+    controller.applySuggestedPrompt(prompt)
+  }, [controller])
 
   return {
     ...snapshot,

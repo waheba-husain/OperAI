@@ -19,7 +19,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import { ApiClient } from '../client.ts'
-import { ApiError, ConfigurationError, NetworkError } from '../errors.ts'
+import { ApiError } from '../errors.ts'
 import {
   getOrders,
   getPlan,
@@ -35,7 +35,6 @@ import {
   getTodayDateIST
 } from '../../hooks/useOverviewData.ts'
 import {
-  DEMO_KPIS,
   DEMO_HOURLY_PERFORMANCE,
   DEMO_STATION_HEALTH
 } from '../../pages/overview/overviewData.ts'
@@ -275,7 +274,7 @@ test('Overview Integration: 404 PLAN_NOT_FOUND is handled gracefully without cra
     fetchFn: mockFetch
   })
 
-  let planRes: PlanResponseDTO | null = null
+  let planRes: PlanResponseDTO | null
   try {
     planRes = await getPlan({ date: '2026-10-17' }, { client })
   } catch (err: unknown) {

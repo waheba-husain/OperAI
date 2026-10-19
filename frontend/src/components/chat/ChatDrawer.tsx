@@ -36,28 +36,34 @@ export function ChatDrawer({
 }: ChatDrawerProps) {
   const drawerRef = useRef<HTMLDivElement | null>(null)
 
-  // Stop voice recognition and speech synthesis if active when drawer closes or unmounts
+  const voiceRef = useRef(voice)
+  useEffect(() => {
+    voiceRef.current = voice
+  })
+
+  // Stop voice recognition and speech synthesis if active when drawer closes
   useEffect(() => {
     if (!isOpen) {
-      if (voice?.isListening) {
-        voice.stopListening()
+      if (voiceRef.current?.isListening) {
+        voiceRef.current.stopListening()
       }
-      if (voice?.isSpeaking) {
-        voice.stopSpeaking()
+      if (voiceRef.current?.isSpeaking) {
+        voiceRef.current.stopSpeaking()
       }
     }
-  }, [isOpen, voice])
+  }, [isOpen])
 
+  // Stop voice recognition and speech synthesis when drawer unmounts
   useEffect(() => {
     return () => {
-      if (voice?.isListening) {
-        voice.stopListening()
+      if (voiceRef.current?.isListening) {
+        voiceRef.current.stopListening()
       }
-      if (voice?.isSpeaking) {
-        voice.stopSpeaking()
+      if (voiceRef.current?.isSpeaking) {
+        voiceRef.current.stopSpeaking()
       }
     }
-  }, [voice])
+  }, [])
 
   // Handle Escape key to dismiss drawer
   useEffect(() => {

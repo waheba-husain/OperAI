@@ -42,7 +42,6 @@ function shiftDate(dateStr: string, deltaDays: number): string {
 }
 
 export function ShortageRecoveryPage({
-  onNavigate: _onNavigate,
   dataOptions
 }: ShortageRecoveryPageProps) {
   const {
@@ -69,9 +68,7 @@ export function ShortageRecoveryPage({
     isLoadingActions,
     actionsError,
     selectedIngredientId,
-    reportedQty: _reportedQty,
     setSelectedIngredientId,
-    setReportedQty: _setReportedQty,
     setTargetDate,
     requestRecoveryProposal,
     approveRecoveryOption,

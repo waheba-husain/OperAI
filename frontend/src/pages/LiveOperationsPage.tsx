@@ -28,7 +28,7 @@ interface LiveOperationsPageProps {
   readonly dataOptions?: UseLiveOpsDataOptions
 }
 
-export function LiveOperationsPage({ onNavigate: _onNavigate, dataOptions }: LiveOperationsPageProps) {
+export function LiveOperationsPage({ dataOptions }: LiveOperationsPageProps) {
   const {
     mode,
     isLoading,

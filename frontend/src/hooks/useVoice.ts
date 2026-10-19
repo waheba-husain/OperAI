@@ -25,7 +25,7 @@
       remains seamless when voice APIs are unavailable or permission is denied.
    ============================================================ */
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import type { VoiceErrorReason, VoiceInputState } from '../types/chat.ts'
 
 /* ── Web Speech API Minimal Type Definitions ─────────────────── */
@@ -290,9 +290,17 @@ export class VoiceSessionController {
     return this.activeUtterance
   }
 
+  activate(): void {
+    this.isDestroyed = false
+  }
+
   updateOptions(options?: Partial<VoiceSessionControllerOptions>): void {
     if (!options) return
-    this.options = { ...this.options, ...options }
+    this.options = {
+      ...this.options,
+      ...options,
+      onStateChange: options.onStateChange ?? this.options.onStateChange
+    }
   }
 
   private emitState(): void {
@@ -420,6 +428,7 @@ export class VoiceSessionController {
       this.error = mapped.message
       this.errorReason = mapped.reason
       this.voiceState = 'error'
+      this.isListening = false
       this.options.onError?.(this.error, this.errorReason)
       this.emitState()
     }
@@ -450,6 +459,7 @@ export class VoiceSessionController {
       this.errorReason = 'unknown'
       this.voiceState = 'error'
       this.isListening = false
+      this.recognitionInstance = null
       this.options.onError?.(this.error, this.errorReason)
       this.emitState()
     }
@@ -457,7 +467,7 @@ export class VoiceSessionController {
 
   stopListening(): void {
     if (this.isDestroyed) return
-    if (!this.isListening || !this.recognitionInstance) {
+    if (!this.recognitionInstance) {
       return
     }
 
@@ -467,6 +477,10 @@ export class VoiceSessionController {
       // Ignore if already stopped
     }
     this.isListening = false
+    if (this.voiceState !== 'error') {
+      this.voiceState = 'idle'
+    }
+    this.emitState()
   }
 
   resetTranscript(): void {
@@ -605,6 +619,11 @@ export class VoiceSessionController {
 
   destroy(): void {
     this.isDestroyed = true
+    this.isListening = false
+    this.isSpeaking = false
+    if (this.voiceState !== 'unsupported') {
+      this.voiceState = 'idle'
+    }
 
     if (this.recognitionInstance) {
       try {
@@ -646,9 +665,6 @@ export class VoiceSessionController {
  * This hook NEVER calls approval or mutation endpoints.
  */
 export function useVoice(options?: UseVoiceOptions): UseVoiceReturn {
-  const optionsRef = useRef(options)
-  optionsRef.current = options
-
   const [state, setState] = useState<VoiceSessionState>(() => {
     const isRecSupported = getSpeechRecognitionConstructor() !== null
     return {
@@ -663,57 +679,48 @@ export function useVoice(options?: UseVoiceOptions): UseVoiceReturn {
     }
   })
 
-  const controllerRef = useRef<VoiceSessionController | null>(null)
-
-  if (!controllerRef.current) {
-    controllerRef.current = new VoiceSessionController({
-      ...optionsRef.current,
+  const [controller] = useState(() => {
+    return new VoiceSessionController({
       onStateChange: (newState) => {
         setState(newState)
-      },
-      onFinalTranscript: (finalSeg) => {
-        optionsRef.current?.onFinalTranscript?.(finalSeg)
-      },
-      onError: (err, reason) => {
-        optionsRef.current?.onError?.(err, reason)
       }
     })
-  }
+  })
 
   useEffect(() => {
-    controllerRef.current?.updateOptions(options)
-  }, [options?.lang, options?.continuous, options?.interimResults])
-
-  useEffect(() => {
+    controller.activate()
     return () => {
-      controllerRef.current?.destroy()
-      controllerRef.current = null
+      controller.destroy()
     }
-  }, [])
+  }, [controller])
+
+  useEffect(() => {
+    controller.updateOptions(options)
+  }, [controller, options])
 
   const startListening = useCallback(() => {
-    controllerRef.current?.startListening()
-  }, [])
+    controller.startListening()
+  }, [controller])
 
   const stopListening = useCallback(() => {
-    controllerRef.current?.stopListening()
-  }, [])
+    controller.stopListening()
+  }, [controller])
 
   const resetTranscript = useCallback(() => {
-    controllerRef.current?.resetTranscript()
-  }, [])
+    controller.resetTranscript()
+  }, [controller])
 
   const speak = useCallback((text: string) => {
-    controllerRef.current?.speak(text)
-  }, [])
+    controller.speak(text)
+  }, [controller])
 
   const stopSpeaking = useCallback(() => {
-    controllerRef.current?.stopSpeaking()
-  }, [])
+    controller.stopSpeaking()
+  }, [controller])
 
   return {
-    isRecognitionSupported: controllerRef.current?.isRecognitionSupported ?? false,
-    isSynthesisSupported: controllerRef.current?.isSynthesisSupported ?? false,
+    isRecognitionSupported: controller.isRecognitionSupported,
+    isSynthesisSupported: controller.isSynthesisSupported,
     voiceState: state.voiceState,
     isListening: state.isListening,
     isSpeaking: state.isSpeaking,

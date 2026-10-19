@@ -30,7 +30,6 @@ import type { AgentChatResponseDTO } from '../../types/dto.ts'
 import {
   ChatConversationController,
   extractActionMetadata,
-  generateChatMessageId,
   MAX_CHAT_MESSAGE_LENGTH,
   SUGGESTED_CHAT_PROMPTS
 } from '../../hooks/useChatData.ts'
@@ -611,7 +610,6 @@ test('ChatConversationController: clearConversation resets conversation history 
 })
 
 test('ChatConversationController: destroy aborts active in-flight request', async () => {
-  let wasAborted = false
   const { client } = createMockClient({
     delayMs: 100,
     onRequest: () => {}

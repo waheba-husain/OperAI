@@ -31,7 +31,7 @@ export interface AuditLogPageProps {
   readonly dataOptions?: UseAuditLogDataOptions
 }
 
-export function AuditLogPage({ onNavigate: _onNavigate, dataOptions }: AuditLogPageProps) {
+export function AuditLogPage({ dataOptions }: AuditLogPageProps) {
   const {
     mode,
     isLive,

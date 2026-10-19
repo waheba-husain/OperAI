@@ -47,10 +47,8 @@ import {
 } from '../adapters/liveOpsAdapter.ts'
 
 import type {
-  ActionListResponseDTO,
   BriefResponseDTO,
   OrderDTO,
-  OrderListResponseDTO,
   PlanResponseDTO
 } from '../../types/dto.ts'
 

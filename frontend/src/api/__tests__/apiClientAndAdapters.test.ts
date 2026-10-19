@@ -12,31 +12,20 @@ import assert from 'node:assert/strict'
 import { ApiClient } from '../client.ts'
 import { ApiError, ConfigurationError, NetworkError } from '../errors.ts'
 import {
-  adaptOrdersToLiveOrders,
   adaptOrderToLiveOrder,
-  calculateOrderUrgency,
-  formatTimeIST,
   mapOrderStatus
 } from '../adapters/orderAdapter.ts'
 import {
-  adaptTasksToLivePrepTasks,
-  adaptTasksToOverviewItems,
   adaptTaskToLivePrepTask,
   adaptTaskToOverviewItem,
-  calculateDurationMins,
-  deriveWorkstationLabel,
-  mapLiveTaskStatus,
-  mapOverviewTaskStatus
+  deriveWorkstationLabel
 } from '../adapters/planAdapter.ts'
 import {
   adaptBriefToAiBriefing,
-  adaptBriefToIngredientAlerts,
   adaptShortageToIngredientAlert
 } from '../adapters/briefAdapter.ts'
 import {
-  adaptActionsToOpsAlerts,
-  adaptActionToOpsAlert,
-  formatActionImpactSummary
+  adaptActionToOpsAlert
 } from '../adapters/actionAdapter.ts'
 import { deriveOverviewKpis } from '../adapters/kpiAdapter.ts'
 

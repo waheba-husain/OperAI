@@ -26,7 +26,6 @@ import assert from 'node:assert/strict'
 import {
   getSpeechRecognitionConstructor,
   getSpeechSynthesis,
-  getSpeechSynthesisUtteranceConstructor,
   mapSpeechRecognitionError,
   VoiceSessionController,
   type SpeechRecognitionErrorEventLike,
@@ -148,6 +147,15 @@ function createMockWindow(overrides?: {
   }
 }
 
+function createSpyRecognition(onCreated: (instance: MockSpeechRecognitionInstance) => void) {
+  return class extends MockSpeechRecognitionInstance {
+    constructor() {
+      super()
+      onCreated(this)
+    }
+  }
+}
+
 /* ── 1. Browser Detection & Prefixes ─────────────────────────── */
 
 test('useVoice: detects standard window.SpeechRecognition when present', () => {
@@ -221,13 +229,9 @@ test('useVoice: gracefully handles unsupported SpeechSynthesis when speak() is c
 
 test('useVoice: startListening creates recognition instance with configured language and options', async () => {
   let createdInstance: MockSpeechRecognitionInstance | null = null
-
-  class SpyRecognition extends MockSpeechRecognitionInstance {
-    constructor() {
-      super()
-      createdInstance = this
-    }
-  }
+  const SpyRecognition = createSpyRecognition((inst) => {
+    createdInstance = inst
+  })
 
   const mockWin = createMockWindow({ recognition: SpyRecognition })
   const controller = new VoiceSessionController({
@@ -264,13 +268,9 @@ test('useVoice: startListening creates recognition instance with configured lang
 
 test('useVoice: distinguishes interim from final transcripts and combines them cleanly', () => {
   let activeInstance: MockSpeechRecognitionInstance | null = null
-
-  class SpyRecognition extends MockSpeechRecognitionInstance {
-    constructor() {
-      super()
-      activeInstance = this
-    }
-  }
+  const SpyRecognition = createSpyRecognition((inst) => {
+    activeInstance = inst
+  })
 
   const mockWin = createMockWindow({ recognition: SpyRecognition })
   const controller = new VoiceSessionController({
@@ -345,13 +345,9 @@ test('useVoice: distinguishes interim from final transcripts and combines them c
 
 test('useVoice: fires onFinalTranscript exactly once per finalized index and avoids duplication', () => {
   let activeInstance: MockSpeechRecognitionInstance | null = null
-
-  class SpyRecognition extends MockSpeechRecognitionInstance {
-    constructor() {
-      super()
-      activeInstance = this
-    }
-  }
+  const SpyRecognition = createSpyRecognition((inst) => {
+    activeInstance = inst
+  })
 
   const mockWin = createMockWindow({ recognition: SpyRecognition })
   const finalSegments: string[] = []
@@ -388,13 +384,9 @@ test('useVoice: fires onFinalTranscript exactly once per finalized index and avo
 
 test('useVoice: maps not-allowed error to permission_denied with helpful user message', () => {
   let activeInstance: MockSpeechRecognitionInstance | null = null
-
-  class SpyRecognition extends MockSpeechRecognitionInstance {
-    constructor() {
-      super()
-      activeInstance = this
-    }
-  }
+  const SpyRecognition = createSpyRecognition((inst) => {
+    activeInstance = inst
+  })
 
   const mockWin = createMockWindow({ recognition: SpyRecognition })
   let capturedError: string | null = null
@@ -439,13 +431,9 @@ test('useVoice: maps standard recognition errors (no-speech, network, aborted, u
 
 test('useVoice: preserves error state when onend fires immediately after onerror', () => {
   let activeInstance: MockSpeechRecognitionInstance | null = null
-
-  class SpyRecognition extends MockSpeechRecognitionInstance {
-    constructor() {
-      super()
-      activeInstance = this
-    }
-  }
+  const SpyRecognition = createSpyRecognition((inst) => {
+    activeInstance = inst
+  })
 
   const mockWin = createMockWindow({ recognition: SpyRecognition })
   const controller = new VoiceSessionController({ windowRef: mockWin })
@@ -466,13 +454,9 @@ test('useVoice: preserves error state when onend fires immediately after onerror
 
 test('useVoice: repeated startListening calls while listening do not invoke start() repeatedly', () => {
   let activeInstance: MockSpeechRecognitionInstance | null = null
-
-  class SpyRecognition extends MockSpeechRecognitionInstance {
-    constructor() {
-      super()
-      activeInstance = this
-    }
-  }
+  const SpyRecognition = createSpyRecognition((inst) => {
+    activeInstance = inst
+  })
 
   const mockWin = createMockWindow({ recognition: SpyRecognition })
   const controller = new VoiceSessionController({ windowRef: mockWin })
@@ -531,7 +515,6 @@ test('useVoice: speak cancels previous synthesis and plays new utterance', async
 
 test('useVoice: stopSpeaking stops synthesis and resets speaking state to idle', async () => {
   const mockWin = createMockWindow()
-  const synth = mockWin.speechSynthesis as MockSpeechSynthesis
   const controller = new VoiceSessionController({ windowRef: mockWin })
 
   controller.speak('Playing prompt')
@@ -545,13 +528,9 @@ test('useVoice: stopSpeaking stops synthesis and resets speaking state to idle',
 
 test('useVoice: speak automatically stops active listening to prevent microphone feedback loop', () => {
   let activeInstance: MockSpeechRecognitionInstance | null = null
-
-  class SpyRecognition extends MockSpeechRecognitionInstance {
-    constructor() {
-      super()
-      activeInstance = this
-    }
-  }
+  const SpyRecognition = createSpyRecognition((inst) => {
+    activeInstance = inst
+  })
 
   const mockWin = createMockWindow({ recognition: SpyRecognition })
   const controller = new VoiceSessionController({ windowRef: mockWin })
@@ -569,13 +548,9 @@ test('useVoice: speak automatically stops active listening to prevent microphone
 
 test('useVoice: resetTranscript clears all transcript buffers and resets error state', () => {
   let activeInstance: MockSpeechRecognitionInstance | null = null
-
-  class SpyRecognition extends MockSpeechRecognitionInstance {
-    constructor() {
-      super()
-      activeInstance = this
-    }
-  }
+  const SpyRecognition = createSpyRecognition((inst) => {
+    activeInstance = inst
+  })
 
   const mockWin = createMockWindow({ recognition: SpyRecognition })
   const controller = new VoiceSessionController({ windowRef: mockWin })
@@ -610,13 +585,9 @@ test('useVoice: resetTranscript clears all transcript buffers and resets error s
 
 test('useVoice: destroy aborts recognition, cancels synthesis, and prevents subsequent state emission', () => {
   let activeInstance: MockSpeechRecognitionInstance | null = null
-
-  class SpyRecognition extends MockSpeechRecognitionInstance {
-    constructor() {
-      super()
-      activeInstance = this
-    }
-  }
+  const SpyRecognition = createSpyRecognition((inst) => {
+    activeInstance = inst
+  })
 
   const mockWin = createMockWindow({ recognition: SpyRecognition })
   const synth = mockWin.speechSynthesis as MockSpeechSynthesis
@@ -651,13 +622,9 @@ test('useVoice: destroy aborts recognition, cancels synthesis, and prevents subs
 
 test('useVoice: does NOT auto-submit transcripts or call approve/mutation endpoints', () => {
   let activeInstance: MockSpeechRecognitionInstance | null = null
-
-  class SpyRecognition extends MockSpeechRecognitionInstance {
-    constructor() {
-      super()
-      activeInstance = this
-    }
-  }
+  const SpyRecognition = createSpyRecognition((inst) => {
+    activeInstance = inst
+  })
 
   const mockWin = createMockWindow({ recognition: SpyRecognition })
   const controller = new VoiceSessionController({ windowRef: mockWin })
@@ -790,3 +757,147 @@ test('useVoice: unsupported speech synthesis operates gracefully without corrupt
   assert.strictEqual(controller.getState().errorReason, 'not_supported')
   assert.strictEqual(controller.getState().isSpeaking, false)
 })
+
+test('useVoice: React StrictMode mount/cleanup/remount lifecycle preserves recognition functionality via activate()', () => {
+  let activeInstance: MockSpeechRecognitionInstance | null = null
+  const SpyRecognition = createSpyRecognition((inst) => {
+    activeInstance = inst
+  })
+
+  const mockWin = createMockWindow({ recognition: SpyRecognition })
+  const controller = new VoiceSessionController({ windowRef: mockWin })
+
+  let latestState: VoiceSessionState = controller.getState()
+  controller.updateOptions({
+    onStateChange: (st) => {
+      latestState = st
+    }
+  })
+
+  // 1. Initial mount occurs
+  assert.strictEqual(latestState.voiceState, 'idle')
+
+  // 2. React StrictMode simulates unmount by calling effect cleanup: destroy()
+  controller.destroy()
+  assert.strictEqual(controller.getState().isListening, false)
+
+  // 3. React StrictMode immediately remounts by calling effect setup: activate()
+  controller.activate()
+
+  // 4. User clicks microphone button in UI
+  controller.startListening()
+  assert.strictEqual(latestState.isListening, true)
+  assert.strictEqual(latestState.voiceState, 'listening')
+
+  // 5. Speech recognition emits final transcript
+  const rec = activeInstance!
+  rec.emitResult({
+    resultIndex: 0,
+    results: [
+      {
+        isFinal: true,
+        length: 1,
+        0: { transcript: 'We are out of butter' }
+      }
+    ]
+  })
+
+  assert.strictEqual(latestState.finalTranscript, 'We are out of butter')
+  assert.strictEqual(latestState.transcript, 'We are out of butter')
+
+  // 6. User clicks stop / recognition finishes
+  controller.stopListening()
+  rec.emitEnd()
+  assert.strictEqual(latestState.isListening, false)
+  assert.strictEqual(latestState.voiceState, 'idle')
+})
+
+test('useVoice: recognition.start() throwing does not leave controller stuck in listening state', () => {
+  class ThrowingRecognition extends MockSpeechRecognitionInstance {
+    override start(): void {
+      throw new Error('Failed to start audio source')
+    }
+  }
+
+  const mockWin = createMockWindow({ recognition: ThrowingRecognition })
+  const controller = new VoiceSessionController({ windowRef: mockWin })
+
+  controller.startListening()
+
+  const state = controller.getState()
+  assert.strictEqual(state.isListening, false, 'isListening must be false when start() throws')
+  assert.strictEqual(state.voiceState, 'error')
+  assert.strictEqual(state.error, 'Speech recognition could not be started.')
+  assert.strictEqual(state.errorReason, 'unknown')
+})
+
+test('useVoice: onerror immediately clears isListening and sets error state', () => {
+  let activeInstance: MockSpeechRecognitionInstance | null = null
+  const SpyRecognition = createSpyRecognition((inst) => {
+    activeInstance = inst
+  })
+
+  const mockWin = createMockWindow({ recognition: SpyRecognition })
+  const controller = new VoiceSessionController({ windowRef: mockWin })
+
+  let latestState = controller.getState()
+  controller.updateOptions({
+    onStateChange: (st) => {
+      latestState = st
+    }
+  })
+
+  controller.startListening()
+  assert.strictEqual(latestState.isListening, true)
+
+  // Browser fires permission denied error
+  activeInstance!.emitError({ error: 'not-allowed' })
+
+  assert.strictEqual(latestState.isListening, false, 'isListening must be cleared immediately upon onerror')
+  assert.strictEqual(latestState.voiceState, 'error')
+  assert.strictEqual(latestState.errorReason, 'permission_denied')
+  assert.ok(latestState.error?.includes('Microphone permission was denied'))
+})
+
+test('useVoice: empty speech session ending without transcript resets to idle and allows retry', () => {
+  let activeInstance: MockSpeechRecognitionInstance | null = null
+  const SpyRecognition = createSpyRecognition((inst) => {
+    activeInstance = inst
+  })
+
+  const mockWin = createMockWindow({ recognition: SpyRecognition })
+  const controller = new VoiceSessionController({ windowRef: mockWin })
+
+  let latestState = controller.getState()
+  controller.updateOptions({
+    onStateChange: (st) => {
+      latestState = st
+    }
+  })
+
+  // 1. Session 1 begins, user says nothing, session ends
+  controller.startListening()
+  assert.strictEqual(latestState.isListening, true)
+
+  activeInstance!.emitEnd()
+  assert.strictEqual(latestState.isListening, false)
+  assert.strictEqual(latestState.voiceState, 'idle')
+  assert.strictEqual(latestState.transcript, '')
+
+  // 2. User retries: Session 2 begins and succeeds
+  controller.startListening()
+  assert.strictEqual(latestState.isListening, true)
+
+  activeInstance!.emitResult({
+    resultIndex: 0,
+    results: [{ isFinal: true, length: 1, 0: { transcript: 'We need fresh tomatoes' } }]
+  })
+  assert.strictEqual(latestState.finalTranscript, 'We need fresh tomatoes')
+
+  activeInstance!.emitEnd()
+  assert.strictEqual(latestState.isListening, false)
+  assert.strictEqual(latestState.voiceState, 'idle')
+  assert.strictEqual(latestState.transcript, 'We need fresh tomatoes')
+})
+
+

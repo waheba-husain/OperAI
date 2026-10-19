@@ -46,18 +46,15 @@ import {
   adaptApprovalResponseToViewModel,
   adaptCustomerMessageToViewModel,
   adaptProposedActionsToViewModels,
-  adaptProposedActionToViewModel,
   adaptRejectionResponseToViewModel,
-  formatActionErrorMessage,
-  formatActionImpactSummary
+  formatActionErrorMessage
 } from '../adapters/actionAdapter.ts'
 
 import type {
   ActionApproveResponseDTO,
   ActionListResponseDTO,
   ActionRejectResponseDTO,
-  CustomerMessageDTO,
-  ProposedActionDTO
+  CustomerMessageDTO
 } from '../../types/dto.ts'
 
 /* ── 1. GET /api/actions Pending Actions Mapping ─────────────── */
@@ -683,7 +680,7 @@ test('Safety: expired sibling actions are identified and invalidated upon approv
 })
 
 test('State integrity: successful approval followed by failed background refresh preserves approval result', async () => {
-  let approvalSucceeded = false
+  let approvalSucceeded: boolean
   let refreshFailed = false
   let preservedResult: ActionApproveResponseDTO | null = null
   let refreshErrorMessage = ''
