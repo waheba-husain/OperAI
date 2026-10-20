@@ -3,7 +3,13 @@ from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PlainSerializer,
+    field_validator,
+)
 
 from app.timeutil import IST
 
@@ -151,6 +157,9 @@ class PlanResponse(BaseModel):
     late_orders: list[str] = Field(default_factory=list)
 
 
+# Recovery Options schemas
+
+
 class RecoveryProposeRequest(BaseModel):
     date: date
     ingredient_id: UUID
@@ -158,7 +167,9 @@ class RecoveryProposeRequest(BaseModel):
 
     @field_validator("reported_available_qty")
     @classmethod
-    def validate_reported_available_qty(cls, value: Decimal | None) -> Decimal | None:
+    def validate_reported_available_qty(
+        cls, value: Decimal | None
+    ) -> Decimal | None:
         if value is not None and value < 0:
             raise ValueError("reported_available_qty must be nonnegative")
         return value
@@ -202,7 +213,13 @@ class RecoveryImpact(BaseModel):
 class RecoveryOption(BaseModel):
     action_id: UUID
     option_number: int
-    option_type: Literal["substitute", "dish_swap", "delay_notify", "partial", "emergency_purchase"]
+    option_type: Literal[
+        "substitute",
+        "dish_swap",
+        "delay_notify",
+        "partial",
+        "emergency_purchase",
+    ]
     title: str
     status: Literal["pending"]
     needs_customer_consent: bool
@@ -237,3 +254,30 @@ class ProposedActionListResponse(BaseModel):
     data: list[ProposedActionOut]
     count: int
 
+
+# Risk Brief schemas
+
+
+class ShortageOut(BaseModel):
+    ingredient_id: UUID
+    name: str
+    unit: str
+    stock_qty: Qty
+    needed_qty: Qty
+    short_by: Qty
+
+
+class AtRiskOrderOut(BaseModel):
+    order_id: UUID
+    customer_name: str
+    deadline: IsoDateTime
+    total_amount: Money
+
+
+class BriefResponse(BaseModel):
+    date: str
+    order_count: int
+    shortages: list[ShortageOut]
+    at_risk_orders: list[AtRiskOrderOut]
+    revenue_at_risk: Money
+    data_source: str

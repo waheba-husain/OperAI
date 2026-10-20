@@ -3,11 +3,19 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from app.routers import pricing
 
 from app.config import settings
 from app.errors import AppError
-from app.routers import actions, ingredients, menu, orders, plan, recovery
+from app.routers import (
+    actions,
+    brief,
+    ingredients,
+    menu,
+    orders,
+    plan,
+    pricing,
+    recovery,
+)
 
 app = FastAPI(title="OperAI API")
 
@@ -18,14 +26,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(actions.router)
+app.include_router(brief.router)
 app.include_router(ingredients.router)
 app.include_router(menu.router)
 app.include_router(orders.router)
 app.include_router(plan.router)
 app.include_router(pricing.router)
 app.include_router(recovery.router)
-app.include_router(actions.router)
-
 
 
 @app.exception_handler(AppError)
@@ -43,7 +51,10 @@ def app_error_handler(_request: Request, exc: AppError) -> JSONResponse:
 
 
 @app.exception_handler(RequestValidationError)
-def validation_error_handler(_request: Request, exc: RequestValidationError) -> JSONResponse:
+def validation_error_handler(
+    _request: Request,
+    exc: RequestValidationError,
+) -> JSONResponse:
     return JSONResponse(
         status_code=422,
         content={
