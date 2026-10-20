@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
+from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, field_validator
 
 from app.timeutil import IST
 
@@ -16,6 +16,10 @@ Qty = Annotated[
     PlainSerializer(lambda v: float(v), return_type=float, when_used="json"),
 ]
 MarginPct = Annotated[
+    Decimal,
+    PlainSerializer(lambda v: float(v), return_type=float, when_used="json"),
+]
+Score = Annotated[
     Decimal,
     PlainSerializer(lambda v: float(v), return_type=float, when_used="json"),
 ]
@@ -145,4 +149,91 @@ class PlanResponse(BaseModel):
     plan_version: int
     tasks: list[PlanTaskOut]
     late_orders: list[str] = Field(default_factory=list)
+
+
+class RecoveryProposeRequest(BaseModel):
+    date: date
+    ingredient_id: UUID
+    reported_available_qty: Qty | None = None
+
+    @field_validator("reported_available_qty")
+    @classmethod
+    def validate_reported_available_qty(cls, value: Decimal | None) -> Decimal | None:
+        if value is not None and value < 0:
+            raise ValueError("reported_available_qty must be nonnegative")
+        return value
+
+
+class RecoveryShortage(BaseModel):
+    ingredient_id: UUID
+    name: str
+    short_by: Qty
+    unit: str
+
+
+class RecoveryBaseline(BaseModel):
+    label: str = "Do nothing"
+    late_orders: int
+    revenue_at_risk: Money
+    extra_cost: Money = Decimal("0.00")
+
+
+class RecoveryWeights(BaseModel):
+    lateness: Score
+    margin: Score
+    customer_risk: Score
+
+
+class RecoveryScoring(BaseModel):
+    weights: RecoveryWeights
+
+
+class RecoveryImpact(BaseModel):
+    late_orders: int
+    orders_protected: int
+    revenue_at_risk_after: Money
+    extra_cost: Money
+    margin_before_pct: MarginPct
+    margin_after_pct: MarginPct
+    customer_risk: Literal["low", "medium", "high"]
+    score: Score
+
+
+class RecoveryOption(BaseModel):
+    action_id: UUID
+    option_number: int
+    option_type: Literal["substitute", "dish_swap", "delay_notify", "partial", "emergency_purchase"]
+    title: str
+    status: Literal["pending"]
+    needs_customer_consent: bool
+    impact: RecoveryImpact
+    expires_at: IsoDateTime
+
+
+class RecoveryProposeResponse(BaseModel):
+    group_id: UUID
+    shortage: RecoveryShortage
+    baseline: RecoveryBaseline
+    scoring: RecoveryScoring
+    recommended_option_number: int | None
+    options: list[RecoveryOption]
+    escalation: str | None = None
+
+
+class ProposedActionOut(BaseModel):
+    id: UUID
+    group_id: UUID
+    option_number: int
+    action_type: str
+    title: str
+    status: str
+    impact: dict
+    base_plan_version: int
+    created_at: IsoDateTime
+    expires_at: IsoDateTime
+
+
+class ProposedActionListResponse(BaseModel):
+    data: list[ProposedActionOut]
+    count: int
 

@@ -1,12 +1,13 @@
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.routers import pricing
 
 from app.config import settings
 from app.errors import AppError
-from app.routers import ingredients, menu, orders, plan
+from app.routers import actions, ingredients, menu, orders, plan, recovery
 
 app = FastAPI(title="OperAI API")
 
@@ -22,6 +23,8 @@ app.include_router(menu.router)
 app.include_router(orders.router)
 app.include_router(plan.router)
 app.include_router(pricing.router)
+app.include_router(recovery.router)
+app.include_router(actions.router)
 
 
 
@@ -47,7 +50,7 @@ def validation_error_handler(_request: Request, exc: RequestValidationError) -> 
             "error": {
                 "code": "VALIDATION_ERROR",
                 "message": "Invalid request",
-                "details": {"errors": exc.errors()},
+                "details": {"errors": jsonable_encoder(exc.errors())},
             }
         },
     )
