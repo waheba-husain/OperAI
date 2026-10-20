@@ -142,3 +142,41 @@ class AuditLog(Base):
     plan_version_after: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(nullable=False)
 
+
+class Substitution(Base):
+    __tablename__ = "substitutions"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    kitchen_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("kitchens.id"), nullable=False)
+    ingredient_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("ingredients.id"), nullable=False)
+    substitute_ingredient_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("ingredients.id"), nullable=False
+    )
+    ratio: Mapped[Decimal] = mapped_column(Numeric(6, 3), nullable=False, default=Decimal("1"))
+    needs_consent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    notes: Mapped[str | None] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class ProposedAction(Base):
+    __tablename__ = "proposed_actions"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    kitchen_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("kitchens.id"), nullable=False)
+    group_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    option_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    action_type: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    impact: Mapped[dict] = mapped_column(JSON, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")
+    base_plan_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    stock_fingerprint: Mapped[str] = mapped_column(Text, nullable=False)
+    undo_of_audit_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("audit_logs.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(nullable=False)
+    decided_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    executed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
