@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from app.routers import pricing
 
 from app.config import settings
 from app.errors import AppError
@@ -20,6 +21,7 @@ app.include_router(ingredients.router)
 app.include_router(menu.router)
 app.include_router(orders.router)
 app.include_router(plan.router)
+app.include_router(pricing.router)
 
 
 
