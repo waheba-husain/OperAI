@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.errors import AppError
-from app.routers import ingredients, menu, orders, plan
+from app.routers import brief, ingredients, menu, orders, plan
 
 app = FastAPI(title="OperAI API")
 
@@ -16,10 +16,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(brief.router)
 app.include_router(ingredients.router)
 app.include_router(menu.router)
 app.include_router(orders.router)
 app.include_router(plan.router)
+
 
 
 

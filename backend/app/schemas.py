@@ -146,3 +146,29 @@ class PlanResponse(BaseModel):
     tasks: list[PlanTaskOut]
     late_orders: list[str] = Field(default_factory=list)
 
+
+class ShortageOut(BaseModel):
+    ingredient_id: UUID
+    name: str
+    unit: str
+    stock_qty: Qty
+    needed_qty: Qty
+    short_by: Qty
+
+
+class AtRiskOrderOut(BaseModel):
+    order_id: UUID
+    customer_name: str
+    deadline: IsoDateTime
+    total_amount: Money
+
+
+class BriefResponse(BaseModel):
+    date: str
+    order_count: int
+    shortages: list[ShortageOut]
+    at_risk_orders: list[AtRiskOrderOut]
+    revenue_at_risk: Money
+    data_source: str
+
+
