@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
@@ -109,3 +109,40 @@ class OrderOut(BaseModel):
 class OrderListResponse(BaseModel):
     data: list[OrderOut]
     count: int
+
+
+class PlanGenerateRequest(BaseModel):
+    date: date
+    regenerate: bool = False
+
+
+class PlanGenerateResponse(BaseModel):
+    date: str
+    plan_version: int
+    solver: Literal["greedy", "cp_sat"] = "greedy"
+    feasible: bool
+    orders_scheduled: int
+    task_count: int
+    late_orders: list[str] = Field(default_factory=list)
+
+
+class PlanTaskOut(BaseModel):
+    id: UUID
+    order_id: UUID
+    order_item_id: UUID
+    dish: str
+    task_type: str
+    burner_no: int | None
+    cook_no: int
+    start_at: IsoDateTime
+    end_at: IsoDateTime
+    status: str
+    locked: bool
+
+
+class PlanResponse(BaseModel):
+    date: str
+    plan_version: int
+    tasks: list[PlanTaskOut]
+    late_orders: list[str] = Field(default_factory=list)
+

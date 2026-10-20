@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import Boolean, ForeignKey, Integer, Numeric, Text, Uuid
+from sqlalchemy import Boolean, ForeignKey, Integer, JSON, Numeric, Text, Uuid
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -104,3 +104,41 @@ class OrderItem(Base):
 
     order: Mapped[Order] = relationship(back_populates="items")
     menu_item: Mapped[MenuItem] = relationship(foreign_keys=[menu_item_id])
+    tasks: Mapped[list["PlanTask"]] = relationship(back_populates="order_item", cascade="all, delete-orphan")
+
+
+class PlanTask(Base):
+    __tablename__ = "plan_tasks"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    kitchen_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("kitchens.id"), nullable=False)
+    order_item_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("order_items.id", ondelete="CASCADE"), nullable=False
+    )
+    task_type: Mapped[str] = mapped_column(Text, nullable=False)
+    burner_no: Mapped[int | None] = mapped_column(Integer)
+    cook_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    start_at: Mapped[datetime] = mapped_column(nullable=False)
+    end_at: Mapped[datetime] = mapped_column(nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="scheduled")
+    locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    plan_version: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    order_item: Mapped[OrderItem] = relationship(back_populates="tasks")
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    kitchen_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("kitchens.id"), nullable=False)
+    action_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    event_type: Mapped[str] = mapped_column(Text, nullable=False)
+    actor: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    before_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    after_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    plan_version_before: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    plan_version_after: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(nullable=False)
+
