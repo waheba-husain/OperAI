@@ -370,3 +370,40 @@ class BriefResponse(BaseModel):
     at_risk_orders: list[AtRiskOrderOut]
     revenue_at_risk: Money
     data_source: str
+
+
+# AI Chat Agent schemas (Rest_API_Spec.md §3.16, frontend AgentChatResponseDTO)
+
+
+class ChatHistoryMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=1000)
+
+    @field_validator("content")
+    @classmethod
+    def validate_content(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("content cannot be empty or whitespace only")
+        return value
+
+
+class AgentChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=500)
+    input_mode: Literal["voice", "text"] | None = None
+    history: list[ChatHistoryMessage] = Field(default_factory=list)
+
+    @field_validator("message")
+    @classmethod
+    def validate_message(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("message cannot be empty or whitespace only")
+        return value
+
+
+class AgentChatResponse(BaseModel):
+    reply: str
+    intent: str
+    tool_used: str | None = None
+    data: dict | None = None
+    requires_confirmation: bool = False
+    confirm_phrases: list[str] = Field(default_factory=list)
