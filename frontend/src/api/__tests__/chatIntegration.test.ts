@@ -316,8 +316,8 @@ test('chatAgent: rejects non-string message with 422 VALIDATION_ERROR', async ()
 
   await assert.rejects(
     async () => {
-      // @ts-expect-error Testing runtime invalid argument
-      await chatAgent({ message: null }, { client })
+      // Testing runtime invalid argument without relying on compiler-flag-dependent directives
+      await chatAgent({ message: null as unknown as string }, { client })
     },
     (err: unknown) => {
       assert(err instanceof ApiError)
