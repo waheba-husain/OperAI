@@ -10,7 +10,7 @@
 import { useEffect, useRef } from 'react'
 import type { ChatMessage } from '../../types/chat.ts'
 import type { PageId } from '../../types/navigation.ts'
-import { SUGGESTED_CHAT_PROMPTS } from '../../hooks/useChatData.ts'
+import { SUGGESTED_CHAT_PROMPTS, shouldRenderProposalCard } from '../../hooks/useChatData.ts'
 import { ChatProposalCard } from './ChatProposalCard.tsx'
 import './ChatMessageList.css'
 
@@ -149,7 +149,7 @@ export function ChatMessageList({
               <div className="chat-message-item__text">{msg.text}</div>
 
               {/* Render proposal card if message contains candidate options */}
-              {!isUser && (msg.requiresConfirmation || msg.actionGroupId || msg.confirmPhrases?.length) && (
+              {shouldRenderProposalCard(msg) && (
                 <ChatProposalCard
                   actionGroupId={msg.actionGroupId}
                   optionActionIds={msg.optionActionIds}

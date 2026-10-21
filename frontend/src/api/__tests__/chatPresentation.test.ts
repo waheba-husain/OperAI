@@ -22,13 +22,66 @@ import {
   ChatConversationController,
   extractActionMetadata,
   MAX_CHAT_MESSAGE_LENGTH,
-  SUGGESTED_CHAT_PROMPTS
+  SUGGESTED_CHAT_PROMPTS,
+  shouldRenderProposalCard
 } from '../../hooks/useChatData.ts'
 import { DEMO_CHAT_CONVERSATION } from '../../pages/chat/demoChatData.ts'
 import type { ChatMessage } from '../../types/chat.ts'
 import type { PageId } from '../../types/navigation.ts'
 
 /* ── 1. Proposal Card Presentation Logic ─────────────────────── */
+
+test('shouldRenderProposalCard: returns boolean false (never numeric 0) when confirmation is false and confirmPhrases is empty', () => {
+  const ordinaryAssistantMsg: ChatMessage = {
+    id: 'msg-1',
+    sender: 'assistant',
+    text: "It looks like there's no active production plan in the system for today.",
+    timestamp: new Date().toISOString(),
+    requiresConfirmation: false,
+    confirmPhrases: [],
+    actionGroupId: undefined,
+    optionActionIds: undefined,
+    status: 'sent'
+  }
+
+  const result = shouldRenderProposalCard(ordinaryAssistantMsg)
+  // Must be strict boolean false, never numeric 0 which React renders as text
+  assert.strictEqual(result, false)
+  assert.notStrictEqual(result, 0)
+
+  // Contrast with previous buggy expression:
+  const isUser = ordinaryAssistantMsg.sender === 'user'
+  const oldBuggyExpr = !isUser && (ordinaryAssistantMsg.requiresConfirmation || ordinaryAssistantMsg.actionGroupId || ordinaryAssistantMsg.confirmPhrases?.length)
+  assert.strictEqual(oldBuggyExpr, 0) // Proves the bug evaluated to numeric 0!
+
+  // Real proposal card with active confirmation returns boolean true
+  const realProposalMsg: ChatMessage = {
+    id: 'msg-2',
+    sender: 'assistant',
+    text: 'Paneer shortage recovery options available.',
+    timestamp: new Date().toISOString(),
+    requiresConfirmation: true,
+    confirmPhrases: ['confirm option 1', 'confirm option 2'],
+    actionGroupId: 'grp-paneer-1',
+    optionActionIds: ['act-1', 'act-2'],
+    status: 'sent'
+  }
+  assert.strictEqual(shouldRenderProposalCard(realProposalMsg), true)
+
+  // Real proposal with only actionGroupId returns true
+  const groupOnlyMsg: ChatMessage = {
+    ...ordinaryAssistantMsg,
+    actionGroupId: 'grp-xyz'
+  }
+  assert.strictEqual(shouldRenderProposalCard(groupOnlyMsg), true)
+
+  // User messages never render proposal card
+  const userMsg: ChatMessage = {
+    ...realProposalMsg,
+    sender: 'user'
+  }
+  assert.strictEqual(shouldRenderProposalCard(userMsg), false)
+})
 
 test('ChatProposalCard logic: suppresses display when no confirmation metadata or group ID exists', () => {
   const shouldRenderProposal = (props: {
@@ -59,6 +112,7 @@ test('ChatProposalCard logic: suppresses display when no confirmation metadata o
     true
   )
 })
+
 
 test('ChatProposalCard logic: honest extraction handles absent actionGroupId and optionActionIds without fabricating', () => {
   const emptyData = extractActionMetadata({})

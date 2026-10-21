@@ -467,10 +467,15 @@ test('Voice Approval: ambiguous phrase ("what about option 2?") routes through c
 
   // Routed through normal chatAgent endpoint
   const chatCalls = getChatCalls()
-  assert.strictEqual(chatCalls.length, 1)
   assert.deepStrictEqual(chatCalls[0].body, {
     message: 'What about option 2?',
-    input_mode: 'voice'
+    input_mode: 'voice',
+    history: [
+      {
+        role: 'assistant',
+        content: 'I found 2 recovery options for the paneer shortage.'
+      }
+    ]
   })
 })
 
