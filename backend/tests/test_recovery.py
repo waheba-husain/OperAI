@@ -167,6 +167,10 @@ def test_recovery_propose_creates_ranked_options_without_applying(recovery_setup
     assert db.query(PlanTask).count() == 1
     assert db.query(ProposedAction).count() == 3
     assert {row.status for row in db.query(ProposedAction).all()} == {"pending"}
+    assert all(
+        Decimal(str(row.impact["revenue_at_risk_without_action"])) == Decimal("100.00")
+        for row in db.query(ProposedAction).all()
+    )
     db.close()
 
 

@@ -372,6 +372,18 @@ class AuditListResponse(BaseModel):
     count: int
 
 
+class DaySummaryResponse(BaseModel):
+    date: str
+    orders_total: int
+    orders_completed: int
+    actions_executed: int
+    actions_undone: int
+    orders_protected: int
+    revenue_protected: Money
+    net_extra_cost: Money
+    data_source: str
+
+
 class UndoActionOut(BaseModel):
     id: UUID
     group_id: UUID
