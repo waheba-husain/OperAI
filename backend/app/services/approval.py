@@ -1,14 +1,14 @@
 import re
 import urllib.parse
-from datetime import datetime, timezone
-from decimal import Decimal
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
 from sqlalchemy import DateTime, Numeric, Uuid, select
 from sqlalchemy.orm import Session
 
 from app.errors import AppError
-from app.models import AuditLog, Ingredient, Kitchen, Order, OrderItem, PlanTask, ProposedAction
+from app.models import AuditLog, Ingredient, Kitchen, MenuItem, Order, OrderItem, PlanTask, ProposedAction
 from app.schemas import (
     ActionApproveActionOut,
     ActionApproveResponse,
@@ -168,6 +168,441 @@ def _apply_substitute(
     return changes, customer_messages, before_snapshot, after_snapshot, audit_summary
 
 
+def _wa_url(phone: str | None, message: str) -> str:
+    encoded = urllib.parse.quote(message)
+    if phone:
+        return f"https://wa.me/{re.sub(r'[^\d]', '', phone)}?text={encoded}"
+    return f"https://wa.me/?text={encoded}"
+
+
+def _task_conflicts(left: PlanTask, right: PlanTask) -> bool:
+    same_burner = (
+        left.burner_no is not None
+        and right.burner_no is not None
+        and left.burner_no == right.burner_no
+    )
+    same_cook = (
+        left.task_type != "cook"
+        and right.task_type != "cook"
+        and left.cook_no == right.cook_no
+    )
+    same_resource = same_burner or same_cook
+    return same_resource and left.start_at < right.end_at and right.start_at < left.end_at
+
+
+def _resolve_task_overlaps(
+    active_tasks: list[PlanTask],
+    *,
+    kitchen: Kitchen,
+    before_rows: dict[str, dict[str, dict]],
+    after_rows: dict[str, dict[str, dict]],
+    locked_message: str = "A locked task blocks the dish swap replan",
+) -> None:
+    """Resolve resource overlaps and keep each prep before its cook task."""
+    while True:
+        moved_dependency = False
+        tasks_by_item: dict[UUID, list[PlanTask]] = {}
+        for task in active_tasks:
+            tasks_by_item.setdefault(task.order_item_id, []).append(task)
+        for item_tasks in tasks_by_item.values():
+            prep_tasks = [task for task in item_tasks if task.task_type == "prep"]
+            cook_tasks = [task for task in item_tasks if task.task_type == "cook"]
+            for prep in prep_tasks:
+                for cook in cook_tasks:
+                    if prep.end_at <= cook.start_at:
+                        continue
+                    if cook.locked:
+                        raise AppError(
+                            409,
+                            "PLAN_CHANGED",
+                            locked_message,
+                            {"task_id": str(cook.id)},
+                        )
+                    if str(cook.id) not in before_rows.get("plan_tasks", {}):
+                        before_rows.setdefault("plan_tasks", {})[str(cook.id)] = _snapshot_row(cook)
+                    duration = cook.end_at - cook.start_at
+                    cook.start_at = prep.end_at
+                    cook.end_at = cook.start_at + duration
+                    cook.plan_version = kitchen.plan_version + 1
+                    after_rows.setdefault("plan_tasks", {})[str(cook.id)] = _snapshot_row(cook)
+                    moved_dependency = True
+
+        conflict_pair = None
+        ordered = sorted(active_tasks, key=lambda task: (task.start_at, str(task.id)))
+        for index, left in enumerate(ordered):
+            for right in ordered[index + 1:]:
+                if _task_conflicts(left, right):
+                    conflict_pair = (left, right)
+                    break
+            if conflict_pair:
+                break
+        if conflict_pair is None:
+            if moved_dependency:
+                continue
+            break
+        left, right = conflict_pair
+        if right.locked:
+            raise AppError(
+                409,
+                "PLAN_CHANGED",
+                locked_message,
+                {"task_id": str(right.id)},
+            )
+        if str(right.id) not in before_rows.get("plan_tasks", {}):
+            before_rows.setdefault("plan_tasks", {})[str(right.id)] = _snapshot_row(right)
+        duration = right.end_at - right.start_at
+        right.start_at = left.end_at
+        right.end_at = right.start_at + duration
+        right.plan_version = kitchen.plan_version + 1
+        after_rows.setdefault("plan_tasks", {})[str(right.id)] = _snapshot_row(right)
+
+
+def _apply_dish_swap(
+    db: Session,
+    *,
+    kitchen: Kitchen,
+    action: ProposedAction,
+    now: datetime,
+    transcript: str | None = None,
+) -> tuple[ActionChangesOut, list[CustomerMessageOut], dict, dict, str]:
+    payload = action.payload or {}
+    before_rows: dict[str, dict[str, dict]] = {}
+    after_rows: dict[str, dict[str, dict]] = {}
+
+    def remember(table: str, row, *, before: bool) -> None:
+        rows = before_rows if before else after_rows
+        rows.setdefault(table, {}).setdefault(str(row.id), _snapshot_row(row))
+
+    with db.begin_nested():
+        stock_update = payload.get("stock_update")
+        if isinstance(stock_update, dict):
+            try:
+                ingredient_id = UUID(str(stock_update["ingredient_id"]))
+                reported_qty = Decimal(str(stock_update["reported_available_qty"]))
+            except (KeyError, TypeError, ValueError):
+                ingredient_id = None
+            if ingredient_id is not None and reported_qty >= 0:
+                ingredient = db.scalar(
+                    select(Ingredient)
+                    .where(Ingredient.id == ingredient_id, Ingredient.kitchen_id == kitchen.id)
+                    .with_for_update()
+                )
+                if ingredient is not None:
+                    remember("ingredients", ingredient, before=True)
+                    ingredient.stock_qty = reported_qty
+                    ingredient.updated_at = now
+                    remember("ingredients", ingredient, before=False)
+
+        changed_items: dict[UUID, tuple[Order, OrderItem, MenuItem, str]] = {}
+        seen_item_ids: set[UUID] = set()
+        for swap in payload.get("swaps", []):
+            if not isinstance(swap, dict):
+                continue
+            try:
+                item_id = UUID(str(swap["order_item_id"]))
+                menu_id = UUID(str(swap["menu_item_id"]))
+            except (KeyError, TypeError, ValueError):
+                continue
+            if item_id in seen_item_ids:
+                continue
+            seen_item_ids.add(item_id)
+
+            item = db.scalar(
+                select(OrderItem).where(OrderItem.id == item_id).with_for_update()
+            )
+            if item is None:
+                continue
+            order = db.scalar(
+                select(Order)
+                .where(
+                    Order.id == item.order_id,
+                    Order.kitchen_id == kitchen.id,
+                    Order.status.not_in(["cancelled", "completed"]),
+                )
+                .with_for_update()
+            )
+            new_menu = db.scalar(
+                select(MenuItem)
+                .where(MenuItem.id == menu_id, MenuItem.kitchen_id == kitchen.id, MenuItem.is_active.is_(True))
+                .with_for_update()
+            )
+            if order is None or new_menu is None or item.menu_item_id == new_menu.id:
+                continue
+            old_menu = db.scalar(
+                select(MenuItem).where(MenuItem.id == item.menu_item_id, MenuItem.kitchen_id == kitchen.id)
+            )
+            remember("order_items", item, before=True)
+            old_menu_name = old_menu.name if old_menu is not None else "the original dish"
+            if item.swapped_from_item_id is None:
+                item.swapped_from_item_id = item.menu_item_id
+            item.menu_item_id = new_menu.id
+            # Keep the accepted customer price unchanged; recovery impact math uses it.
+            remember("order_items", item, before=False)
+            changed_items[item.id] = (order, item, new_menu, old_menu_name)
+
+        item_ids = list(changed_items)
+        tasks = db.scalars(
+            select(PlanTask)
+            .where(
+                PlanTask.kitchen_id == kitchen.id,
+                PlanTask.order_item_id.in_(item_ids),
+                PlanTask.status != "cancelled",
+            )
+            .order_by(PlanTask.start_at, PlanTask.id)
+            .with_for_update()
+        ).all() if item_ids else []
+        active_tasks = db.scalars(
+            select(PlanTask)
+            .where(PlanTask.kitchen_id == kitchen.id, PlanTask.status != "cancelled")
+            .order_by(PlanTask.start_at, PlanTask.id)
+            .with_for_update()
+        ).all()
+        for task in tasks:
+            if task.locked:
+                continue
+            new_menu = changed_items[task.order_item_id][2]
+            duration = (
+                new_menu.prep_minutes if task.task_type == "prep"
+                else new_menu.cook_minutes if task.task_type == "cook"
+                else None
+            )
+            if duration is None:
+                continue
+            remember("plan_tasks", task, before=True)
+            task.end_at = task.start_at + timedelta(minutes=duration)
+            task.plan_version = kitchen.plan_version + 1
+            remember("plan_tasks", task, before=False)
+
+        _resolve_task_overlaps(
+            active_tasks,
+            kitchen=kitchen,
+            before_rows=before_rows,
+            after_rows=after_rows,
+        )
+
+        db.flush()
+        for table, rows in after_rows.items():
+            model = _UNDO_MODELS[table]
+            ids = [UUID(row_id) for row_id in rows]
+            actual = db.scalars(select(model).where(model.id.in_(ids))).all()
+            after_rows[table] = {str(row.id): _snapshot_row(row) for row in actual}
+
+    before_snapshot = {table: list(rows.values()) for table, rows in before_rows.items()}
+    after_snapshot = {table: list(rows.values()) for table, rows in after_rows.items()}
+
+    messages: list[CustomerMessageOut] = []
+    affected_order_ids: list[UUID] = []
+    dish_names_by_order: dict[UUID, list[str]] = {}
+    order_by_id: dict[UUID, Order] = {}
+    for order, _item, new_menu, _old_name in changed_items.values():
+        if order.id not in order_by_id:
+            affected_order_ids.append(order.id)
+            order_by_id[order.id] = order
+        dish_names_by_order.setdefault(order.id, [])
+        if new_menu.name not in dish_names_by_order[order.id]:
+            dish_names_by_order[order.id].append(new_menu.name)
+    for order_id in affected_order_ids:
+        order = order_by_id[order_id]
+        dish_names = ", ".join(dish_names_by_order[order_id])
+        message = f"Hi {order.customer_name}, your dish was changed to {dish_names}. Reply if you have any concerns."
+        messages.append(CustomerMessageOut(
+            order_id=order.id,
+            customer_name=order.customer_name,
+            needs_consent=True,
+            message=message,
+            whatsapp_url=_wa_url(order.customer_phone, message),
+        ))
+
+    summary = f"Swapped {len(changed_items)} order items to in-stock dishes"
+    if transcript:
+        summary += f" (transcript: {transcript})"
+    return (
+        ActionChangesOut(
+            orders_affected=[str(order_id) for order_id in affected_order_ids],
+            tasks_rescheduled=len(before_rows.get("plan_tasks", {})),
+            summary=summary,
+        ),
+        messages,
+        before_snapshot,
+        after_snapshot,
+        f"{summary}; plan v{kitchen.plan_version} to v{kitchen.plan_version + 1}",
+    )
+
+
+def _apply_emergency_purchase(
+    db: Session,
+    *,
+    kitchen: Kitchen,
+    action: ProposedAction,
+    now: datetime,
+    transcript: str | None = None,
+) -> tuple[ActionChangesOut, list[CustomerMessageOut], dict, dict, str]:
+    payload = action.payload or {}
+    before_rows: dict[str, dict[str, dict]] = {}
+    after_rows: dict[str, dict[str, dict]] = {}
+
+    def remember(table: str, row, *, before: bool) -> None:
+        rows = before_rows if before else after_rows
+        snapshot = _snapshot_ingredient(row) if table == "ingredients" else _snapshot_row(row)
+        if before:
+            rows.setdefault(table, {}).setdefault(str(row.id), snapshot)
+        else:
+            rows.setdefault(table, {})[str(row.id)] = snapshot
+
+    try:
+        ingredient_id = UUID(str(payload["ingredient_id"]))
+        quantity = Decimal(str(payload["quantity"]))
+        delay_minutes = int(payload["delay_minutes"])
+    except (KeyError, TypeError, ValueError, InvalidOperation):
+        ingredient_id = None
+        quantity = Decimal("0")
+        delay_minutes = 0
+    if quantity < 0 or delay_minutes < 0:
+        raise AppError(422, "VALIDATION_ERROR", "Purchase quantity and delay must be nonnegative")
+
+    affected_orders: list[Order] = []
+    active_tasks: list[PlanTask] = []
+    with db.begin_nested():
+        stock_update = payload.get("stock_update")
+        if isinstance(stock_update, dict):
+            try:
+                reported_id = UUID(str(stock_update["ingredient_id"]))
+                reported_qty = Decimal(str(stock_update["reported_available_qty"]))
+            except (KeyError, TypeError, ValueError, InvalidOperation):
+                reported_id = None
+            if reported_id is not None and reported_qty >= 0:
+                reported_ingredient = db.scalar(
+                    select(Ingredient)
+                    .where(Ingredient.id == reported_id, Ingredient.kitchen_id == kitchen.id)
+                    .with_for_update()
+                )
+                if reported_ingredient is not None:
+                    remember("ingredients", reported_ingredient, before=True)
+                    reported_ingredient.stock_qty = reported_qty
+                    reported_ingredient.updated_at = now
+                    remember("ingredients", reported_ingredient, before=False)
+
+        ingredient = None
+        if ingredient_id is not None:
+            ingredient = db.scalar(
+                select(Ingredient)
+                .where(Ingredient.id == ingredient_id, Ingredient.kitchen_id == kitchen.id)
+                .with_for_update()
+            )
+        if ingredient is not None:
+            remember("ingredients", ingredient, before=True)
+            ingredient.stock_qty += quantity
+            ingredient.updated_at = now
+            remember("ingredients", ingredient, before=False)
+
+        order_ids: list[UUID] = []
+        for raw_order_id in payload.get("order_ids") or []:
+            try:
+                parsed_id = UUID(str(raw_order_id))
+            except (TypeError, ValueError):
+                continue
+            if parsed_id not in order_ids:
+                order_ids.append(parsed_id)
+        orders_by_id: dict[UUID, Order] = {}
+        if order_ids:
+            affected_orders = db.scalars(
+                select(Order)
+                .where(
+                    Order.kitchen_id == kitchen.id,
+                    Order.id.in_(order_ids),
+                    Order.status.not_in(["cancelled", "completed"]),
+                )
+                .order_by(Order.id)
+                .with_for_update()
+            ).all()
+            orders_by_id = {order.id: order for order in affected_orders}
+
+        task_order_ids = list(orders_by_id)
+        if task_order_ids:
+            target_tasks = db.scalars(
+                select(PlanTask)
+                .join(OrderItem, OrderItem.id == PlanTask.order_item_id)
+                .where(
+                    PlanTask.kitchen_id == kitchen.id,
+                    PlanTask.status != "cancelled",
+                    OrderItem.order_id.in_(task_order_ids),
+                )
+                .order_by(PlanTask.start_at, PlanTask.id)
+                .with_for_update()
+            ).all()
+            for task in target_tasks:
+                if task.locked:
+                    continue
+                remember("plan_tasks", task, before=True)
+                task.start_at += timedelta(minutes=delay_minutes)
+                task.end_at += timedelta(minutes=delay_minutes)
+                task.plan_version = kitchen.plan_version + 1
+                remember("plan_tasks", task, before=False)
+
+            for order in affected_orders:
+                remember("orders", order, before=True)
+                order.status = "delayed"
+                remember("orders", order, before=False)
+
+            active_tasks = db.scalars(
+                select(PlanTask)
+                .where(PlanTask.kitchen_id == kitchen.id, PlanTask.status != "cancelled")
+                .order_by(PlanTask.start_at, PlanTask.id)
+                .with_for_update()
+            ).all()
+            _resolve_task_overlaps(
+                active_tasks,
+                kitchen=kitchen,
+                before_rows=before_rows,
+                after_rows=after_rows,
+                locked_message="A locked task blocks the emergency purchase replan",
+            )
+        else:
+            for order in affected_orders:
+                remember("orders", order, before=True)
+                order.status = "delayed"
+                remember("orders", order, before=False)
+
+        db.flush()
+        for table, rows in after_rows.items():
+            model = _UNDO_MODELS[table]
+            row_ids = [UUID(row_id) for row_id in rows]
+            current_rows = db.scalars(select(model).where(model.id.in_(row_ids))).all()
+            after_rows[table] = {
+                str(row.id): _snapshot_ingredient(row) if table == "ingredients" else _snapshot_row(row)
+                for row in current_rows
+            }
+
+    messages: list[CustomerMessageOut] = []
+    for order in affected_orders:
+        message = (
+            f"Hi {order.customer_name}, your order will be about {delay_minutes} minutes late. "
+            "We will keep you updated."
+        )
+        messages.append(CustomerMessageOut(
+            order_id=order.id,
+            customer_name=order.customer_name,
+            needs_consent=True,
+            message=message,
+            whatsapp_url=_wa_url(order.customer_phone, message),
+        ))
+
+    summary = f"Purchased {quantity} units and delayed {len(affected_orders)} orders by {delay_minutes} minutes"
+    if transcript:
+        summary += f" (transcript: {transcript})"
+    return (
+        ActionChangesOut(
+            orders_affected=[str(order.id) for order in affected_orders],
+            tasks_rescheduled=len(before_rows.get("plan_tasks", {})),
+            summary=summary,
+        ),
+        messages,
+        {table: list(rows.values()) for table, rows in before_rows.items()},
+        {table: list(rows.values()) for table, rows in after_rows.items()},
+        f"{summary}; plan v{kitchen.plan_version} to v{kitchen.plan_version + 1}",
+    )
+
+
 _UNDO_MODELS = {
     "ingredients": Ingredient,
     "orders": Order,
@@ -310,6 +745,8 @@ def _apply_undo(
 
 APPLIERS = {
     ("recovery", "substitute"): _apply_substitute,
+    ("recovery", "dish_swap"): _apply_dish_swap,
+    ("recovery", "emergency_purchase"): _apply_emergency_purchase,
     ("undo", None): _apply_undo,
 }
 
