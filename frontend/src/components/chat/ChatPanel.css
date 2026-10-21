@@ -129,6 +129,11 @@
   outline-offset: 2px;
 }
 
+.chat-panel__icon-button--muted {
+  color: var(--color-text-tertiary);
+  opacity: 0.75;
+}
+
 /* ── Panel Body ─────────────────────────────────────────────── */
 
 .chat-panel__body {

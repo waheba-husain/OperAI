@@ -25,6 +25,8 @@ export interface ChatDrawerProps {
   readonly chatData: UseChatDataReturn
   readonly voice?: UseVoiceReturn
   readonly triggerRef?: RefObject<HTMLButtonElement | null>
+  readonly isMuted?: boolean
+  readonly onToggleMute?: () => void
 }
 
 export function ChatDrawer({
@@ -32,7 +34,9 @@ export function ChatDrawer({
   onClose,
   chatData,
   voice,
-  triggerRef
+  triggerRef,
+  isMuted,
+  onToggleMute
 }: ChatDrawerProps) {
   const drawerRef = useRef<HTMLDivElement | null>(null)
 
@@ -126,6 +130,8 @@ export function ChatDrawer({
           voice={voice}
           onClose={onClose}
           title="OperAI Assistant"
+          isMuted={isMuted}
+          onToggleMute={onToggleMute}
         />
       </div>
     </div>
