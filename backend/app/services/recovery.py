@@ -33,7 +33,7 @@ from app.schemas import (
 )
 from app.services.kitchen import get_kitchen
 from app.services.pricing import compute_dish_economics
-from app.timeutil import day_bounds
+from app.timeutil import IST, day_bounds
 
 ZERO = Decimal("0")
 HUNDRED = Decimal("100")
@@ -223,7 +223,10 @@ def propose_recovery(
         if replacement.stock_qty < qty_needed:
             continue
         protected = [o for o in at_risk if _order_required(o, ingredient.id) > ZERO]
-        extra_cost = (replacement.cost_per_unit / substitution.ratio - ingredient.cost_per_unit) * short_by
+        extra_cost = (
+            qty_needed * replacement.cost_per_unit
+            - short_by * ingredient.cost_per_unit
+        )
         added_allergens = set(replacement.allergen_tags) - set(original.allergen_tags)
         consent = substitution.needs_consent or bool(added_allergens)
         impact = _option_impact(
@@ -238,15 +241,35 @@ def propose_recovery(
     purchase_cost = short_by * ingredient.cost_per_unit * settings.recovery_emergency_purchase_premium
     impacted_ids = {o.id for o in at_risk}
     latest_by_order: dict[UUID, datetime] = {}
-    for task in db.scalars(
-        select(PlanTask).join(OrderItem, PlanTask.order_item_id == OrderItem.id)
-        .where(PlanTask.kitchen_id == kitchen.id, PlanTask.status != "cancelled")
-    ).all():
-        order_id = db.scalar(select(OrderItem.order_id).where(OrderItem.id == task.order_item_id))
-        if order_id in impacted_ids:
-            latest_by_order[order_id] = max(latest_by_order.get(order_id, task.end_at), task.end_at)
+    locked_order_ids: set[UUID] = set()
+    task_rows = db.execute(
+        select(PlanTask, OrderItem.order_id)
+        .join(OrderItem, PlanTask.order_item_id == OrderItem.id)
+        .where(
+            OrderItem.order_id.in_(impacted_ids),
+            PlanTask.status != "cancelled",
+        )
+    ).all()
+    for task, order_id in task_rows:
+        if task.locked:
+            locked_order_ids.add(order_id)
+        end_at = task.end_at
+        if end_at.tzinfo is None:
+            end_at = end_at.replace(tzinfo=IST)
+        latest_by_order[order_id] = max(latest_by_order.get(order_id, end_at), end_at)
     delay = timedelta(minutes=settings.recovery_emergency_delay_minutes)
-    purchased = [o for o in at_risk if latest_by_order.get(o.id, o.deadline) + delay <= o.deadline]
+    now = datetime.now(IST)
+    purchased: list[Order] = []
+    for order in at_risk:
+        if order.id in locked_order_ids:
+            continue
+        deadline = order.deadline
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=IST)
+        latest_task_end = latest_by_order.get(order.id)
+        completion_with_delay = (latest_task_end if latest_task_end is not None else now) + delay
+        if completion_with_delay <= deadline:
+            purchased.append(order)
     if purchased:
         purchase_impact = _option_impact(
             baseline_late=len(at_risk), baseline_revenue=baseline_revenue,
@@ -256,7 +279,7 @@ def propose_recovery(
         candidates.append(("emergency_purchase", f"Buy {short_by} {ingredient.unit} of {ingredient.name}; delay affected orders by {settings.recovery_emergency_delay_minutes} min",
                            True, {"option_type": "emergency_purchase", "ingredient_id": str(ingredient.id),
                             "quantity": str(short_by), "delay_minutes": settings.recovery_emergency_delay_minutes,
-                            "order_ids": [str(o.id) for o in at_risk]}, purchase_impact))
+                            "order_ids": [str(o.id) for o in purchased]}, purchase_impact))
 
     # A swap candidate must be active, within 20% of the original price and fully in stock.
     menu_rows = db.scalars(

@@ -1,7 +1,7 @@
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 import json
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -124,7 +124,10 @@ def recovery_setup():
     )
     db.add(task)
     db.commit()
-    ids = {"kitchen": kitchen.id, "paneer": paneer.id, "tofu": tofu.id, "rice": rice.id}
+    ids = {
+        "kitchen": kitchen.id, "paneer": paneer.id, "tofu": tofu.id, "rice": rice.id,
+        "order": order.id, "task": task.id,
+    }
     db.close()
 
     def override_get_db():
@@ -233,4 +236,131 @@ def test_no_feasible_options_escalates_without_creating_actions(recovery_setup, 
     assert response.json()["escalation"]
     db = factory()
     assert db.query(ProposedAction).count() == 0
+    db.close()
+
+
+@pytest.mark.parametrize(
+    ("ratio", "expected_quantity", "expected_extra_cost"),
+    [
+        ("1", "0.2", -32),
+        ("2", "0.4", 12),
+        ("0.5", "0.1", -54),
+    ],
+)
+def test_substitution_ratio_cost_and_payload(recovery_setup, ratio, expected_quantity, expected_extra_cost):
+    client, factory, ids = recovery_setup
+    db = factory()
+    substitution = db.query(Substitution).one()
+    substitution.ratio = Decimal(ratio)
+    db.commit()
+    db.close()
+
+    response = client.post("/api/recovery/propose", json={
+        "date": "2026-10-20", "ingredient_id": str(ids["paneer"]),
+    })
+    assert response.status_code == 201
+    option = next(row for row in response.json()["options"] if row["option_type"] == "substitute")
+    db = factory()
+    action = db.get(ProposedAction, UUID(option["action_id"]))
+    assert Decimal(action.payload["quantity"]) == Decimal(expected_quantity)
+    assert Decimal(str(action.impact["extra_cost"])) == Decimal(str(expected_extra_cost))
+    db.close()
+
+
+def test_substitution_is_skipped_when_ratio_exceeds_replacement_stock(recovery_setup):
+    client, factory, ids = recovery_setup
+    db = factory()
+    db.query(Substitution).one().ratio = Decimal("6")
+    db.commit()
+    db.close()
+
+    response = client.post("/api/recovery/propose", json={
+        "date": "2026-10-20", "ingredient_id": str(ids["paneer"]),
+    })
+    assert response.status_code == 201
+    assert all(row["option_type"] != "substitute" for row in response.json()["options"])
+
+
+def _frozen_clock(monkeypatch, now):
+    from app.services import recovery
+
+    real_datetime = datetime
+
+    class FrozenDatetime(real_datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now.astimezone(tz) if tz is not None else now.replace(tzinfo=None)
+
+    monkeypatch.setattr(recovery, "datetime", FrozenDatetime)
+
+
+def _emergency_option(client, ingredient_id, target_date="2026-10-20"):
+    response = client.post("/api/recovery/propose", json={
+        "date": target_date, "ingredient_id": str(ingredient_id),
+    })
+    assert response.status_code in (200, 201)
+    return next(
+        (row for row in response.json()["options"] if row["option_type"] == "emergency_purchase"),
+        None,
+    )
+
+
+def test_emergency_purchase_protects_order_and_uses_premium_cost(recovery_setup):
+    client, factory, ids = recovery_setup
+    option = _emergency_option(client, ids["paneer"])
+    assert option is not None
+    db = factory()
+    action = db.get(ProposedAction, UUID(option["action_id"]))
+    assert action.payload["order_ids"] == [str(ids["order"])]
+    assert Decimal(str(action.impact["extra_cost"])) == Decimal("91.20")
+    db.close()
+
+
+def test_emergency_purchase_rejects_delay_that_misses_deadline(recovery_setup, monkeypatch):
+    client, _, ids = recovery_setup
+    monkeypatch.setattr(settings, "recovery_emergency_delay_minutes", 180)
+    assert _emergency_option(client, ids["paneer"]) is None
+
+
+def test_locked_order_task_cannot_be_protected_by_delay(recovery_setup):
+    client, factory, ids = recovery_setup
+    db = factory()
+    db.get(PlanTask, ids["task"]).locked = True
+    db.commit()
+    db.close()
+    assert _emergency_option(client, ids["paneer"]) is None
+
+
+def test_emergency_purchase_filters_taskless_orders_by_current_deadline(recovery_setup, monkeypatch):
+    client, factory, ids = recovery_setup
+    frozen_now = datetime(2026, 10, 20, 10, 0, tzinfo=IST)
+    _frozen_clock(monkeypatch, frozen_now.astimezone(timezone.utc))
+    db = factory()
+    kitchen = db.get(Kitchen, ids["kitchen"])
+    dish = db.query(MenuItem).filter(MenuItem.name == "Paneer Dish").one()
+    far = Order(
+        id=uuid4(), kitchen_id=kitchen.id, customer_name="Far Taskless", customer_phone=None,
+        channel="direct", deadline=datetime(2026, 10, 20, 12, 0, tzinfo=IST), status="planned",
+        total_amount=Decimal("100"), data_source="simulated", created_at=frozen_now,
+    )
+    near = Order(
+        id=uuid4(), kitchen_id=kitchen.id, customer_name="Near Taskless", customer_phone=None,
+        channel="direct", deadline=datetime(2026, 10, 20, 10, 10, tzinfo=IST), status="planned",
+        total_amount=Decimal("100"), data_source="simulated", created_at=frozen_now,
+    )
+    db.add_all([far, near])
+    db.flush()
+    db.add_all([
+        OrderItem(id=uuid4(), order_id=far.id, menu_item_id=dish.id, quantity=1, unit_price=Decimal("100")),
+        OrderItem(id=uuid4(), order_id=near.id, menu_item_id=dish.id, quantity=1, unit_price=Decimal("100")),
+    ])
+    db.commit()
+    db.close()
+
+    option = _emergency_option(client, ids["paneer"])
+    assert option is not None
+    db = factory()
+    action = db.get(ProposedAction, UUID(option["action_id"]))
+    assert set(action.payload["order_ids"]) == {str(ids["order"]), str(far.id)}
+    assert str(near.id) not in action.payload["order_ids"]
     db.close()
