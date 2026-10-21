@@ -40,7 +40,8 @@ import { ApiError, ConfigurationError, NetworkError } from '../api/errors.ts'
 import type {
   ActionApproveRequestDTO,
   ActionApproveResponseDTO,
-  AgentChatResponseDTO
+  AgentChatResponseDTO,
+  ChatHistoryMessageDTO
 } from '../types/dto.ts'
 import type {
   ChatMessage,
@@ -172,6 +173,18 @@ export function extractActionMetadata(data?: Record<string, unknown> | null): {
 
   return result
 }
+
+/**
+ * Determines whether the candidate proposal card should be rendered for a message.
+ * Strictly returns a boolean to prevent numeric 0 from being rendered as text in React JSX.
+ */
+export function shouldRenderProposalCard(msg: ChatMessage): boolean {
+  if (msg.sender === 'user') return false
+  const hasValidGroupId = typeof msg.actionGroupId === 'string' && msg.actionGroupId.trim().length > 0
+  const hasConfirmPhrases = Array.isArray(msg.confirmPhrases) && msg.confirmPhrases.length > 0
+  return Boolean(msg.requiresConfirmation || hasValidGroupId || hasConfirmPhrases)
+}
+
 
 /* ── View Models & Options ──────────────────────────────────── */
 
@@ -1005,9 +1018,22 @@ export class ChatConversationController {
 
     this.abortController = new AbortController()
 
+    // Collect prior conversation turns in this live thread for multi-turn context
+    const previousHistory: ChatHistoryMessageDTO[] = this.liveMessages
+      .filter((m) => m.id !== userMsg.id && m.status !== 'error' && m.text.trim().length > 0)
+      .slice(-10)
+      .map((m) => ({
+        role: m.sender === 'user' ? ('user' as const) : ('assistant' as const),
+        content: m.text
+      }))
+
     try {
       const response = await chatAgent(
-        { message: messageText, input_mode: inputMode },
+        {
+          message: messageText,
+          input_mode: inputMode,
+          ...(previousHistory.length > 0 ? { history: previousHistory } : {})
+        },
         { client: this.client, signal: this.abortController.signal }
       )
 

@@ -505,10 +505,20 @@ export interface DailySummaryDTO {
 /** Documented input mode for assistant chat requests (Rest_API_Spec.md §3.16) */
 export type AgentChatInputModeDTO = 'voice' | 'text'
 
+/** Role for messages in conversation history */
+export type ChatHistoryRoleDTO = 'user' | 'assistant'
+
+/** Single conversational turn in history */
+export interface ChatHistoryMessageDTO {
+  readonly role: ChatHistoryRoleDTO
+  readonly content: string
+}
+
 /** Request shape for POST /api/agent/chat (Rest_API_Spec.md §3.16) */
 export interface AgentChatRequestDTO {
   readonly message: string // required, 1 to 500 characters
   readonly input_mode?: AgentChatInputModeDTO
+  readonly history?: readonly ChatHistoryMessageDTO[]
 }
 
 /** Response shape for POST /api/agent/chat (Rest_API_Spec.md §3.16) */

@@ -672,3 +672,83 @@ test('chatAgent: supports cancellation via AbortSignal', async () => {
     }
   )
 })
+
+/* ── 9. Multi-Turn History Contract ─────────────────────────── */
+
+test('chatAgent: accurately transmits history array when provided', async () => {
+  let capturedBody: unknown = null
+
+  const mockResponse: AgentChatResponseDTO = {
+    reply: 'Understood, checking paneer recovery options.',
+    intent: 'report_shortage',
+    tool_used: 'propose_recovery',
+    data: null,
+    requires_confirmation: false,
+    confirm_phrases: []
+  }
+
+  const mockFetch = async (_input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    capturedBody = JSON.parse(String(init?.body))
+    return new Response(JSON.stringify(mockResponse), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+
+  const client = new ApiClient({
+    baseUrl: 'https://test-api.operai.com',
+    apiKey: 'test-api-key',
+    fetchFn: mockFetch
+  })
+
+  await chatAgent(
+    {
+      message: 'I currently have 1 kg and require 3 kg to complete the orders.',
+      input_mode: 'text',
+      history: [
+        { role: 'user', content: 'There is a shortage of tomato.' },
+        { role: 'assistant', content: 'What date is the shortage for?' },
+        { role: 'user', content: 'The shortage is for today, and I have four orders that use tomato.' }
+      ]
+    },
+    { client }
+  )
+
+  assert.deepStrictEqual(capturedBody, {
+    message: 'I currently have 1 kg and require 3 kg to complete the orders.',
+    input_mode: 'text',
+    history: [
+      { role: 'user', content: 'There is a shortage of tomato.' },
+      { role: 'assistant', content: 'What date is the shortage for?' },
+      { role: 'user', content: 'The shortage is for today, and I have four orders that use tomato.' }
+    ]
+  })
+})
+
+test('chatAgent: rejects non-array history with 422 VALIDATION_ERROR without sending network request', async () => {
+  let fetchCalled = false
+
+  const client = new ApiClient({
+    baseUrl: 'https://test-api.operai.com',
+    apiKey: 'test-api-key',
+    fetchFn: async () => {
+      fetchCalled = true
+      return new Response('{}', { status: 200 })
+    }
+  })
+
+  await assert.rejects(
+    async () => {
+      // @ts-expect-error Testing invalid runtime input
+      await chatAgent({ message: 'Valid message', history: 'not an array' }, { client })
+    },
+    (err: unknown) => {
+      assert(err instanceof ApiError)
+      assert.strictEqual(err.status, 422)
+      assert.strictEqual(err.code, 'VALIDATION_ERROR')
+      return true
+    }
+  )
+
+  assert.strictEqual(fetchCalled, false)
+})
