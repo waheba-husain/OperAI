@@ -309,6 +309,41 @@ class ActionApproveResponse(BaseModel):
     expired_action_ids: list[UUID]
 
 
+class AuditEntryOut(BaseModel):
+    id: UUID
+    action_id: UUID | None
+    event_type: str
+    actor: str
+    summary: str
+    plan_version_before: int | None
+    plan_version_after: int | None
+    undoable: bool
+    created_at: IsoDateTime
+    before_snapshot: dict | None = None
+    after_snapshot: dict | None = None
+
+
+class AuditListResponse(BaseModel):
+    data: list[AuditEntryOut]
+    count: int
+
+
+class UndoActionOut(BaseModel):
+    id: UUID
+    group_id: UUID
+    option_number: int
+    action_type: Literal["undo"]
+    title: str
+    status: Literal["pending"]
+    undo_of_audit_id: UUID
+    base_plan_version: int
+    expires_at: IsoDateTime
+
+
+class UndoActionResponse(BaseModel):
+    action: UndoActionOut
+
+
 # Risk Brief schemas
 
 

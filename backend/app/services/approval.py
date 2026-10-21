@@ -4,11 +4,11 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import DateTime, Numeric, Uuid, select
 from sqlalchemy.orm import Session
 
 from app.errors import AppError
-from app.models import Ingredient, Kitchen, Order, ProposedAction
+from app.models import AuditLog, Ingredient, Kitchen, Order, OrderItem, PlanTask, ProposedAction
 from app.schemas import (
     ActionApproveActionOut,
     ActionApproveResponse,
@@ -168,8 +168,149 @@ def _apply_substitute(
     return changes, customer_messages, before_snapshot, after_snapshot, audit_summary
 
 
+_UNDO_MODELS = {
+    "ingredients": Ingredient,
+    "orders": Order,
+    "order_items": OrderItem,
+    "plan_tasks": PlanTask,
+}
+_UNDO_RESTORE_ORDER = ("orders", "order_items", "plan_tasks", "ingredients")
+_UNDO_DELETE_ORDER = ("plan_tasks", "order_items", "orders", "ingredients")
+
+
+def _json_value(value):
+    if isinstance(value, (UUID,)):
+        return str(value)
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return value
+
+
+def _snapshot_row(row) -> dict:
+    return {column.name: _json_value(getattr(row, column.name)) for column in row.__table__.columns}
+
+
+def _restore_value(column, value):
+    if value is None:
+        return None
+    if isinstance(column.type, Uuid):
+        return UUID(str(value))
+    if isinstance(column.type, Numeric):
+        return Decimal(str(value))
+    if isinstance(column.type, DateTime) and isinstance(value, str):
+        return datetime.fromisoformat(value)
+    return value
+
+
+def _same_value(column, current, desired) -> bool:
+    if isinstance(column.type, DateTime) and current is not None and desired is not None:
+        if current.tzinfo is None:
+            current = current.replace(tzinfo=timezone.utc)
+        if desired.tzinfo is None:
+            desired = desired.replace(tzinfo=timezone.utc)
+        return current == desired
+    return current == desired
+
+
+def _apply_undo(
+    db: Session,
+    *,
+    kitchen: Kitchen,
+    action: ProposedAction,
+    now: datetime,
+    transcript: str | None = None,
+) -> tuple[ActionChangesOut, list[CustomerMessageOut], dict, dict, str]:
+    source = db.scalar(select(AuditLog).where(
+        AuditLog.id == action.undo_of_audit_id,
+        AuditLog.kitchen_id == kitchen.id,
+        AuditLog.event_type == "action_executed",
+    ))
+    if source is None:
+        raise AppError(409, "UNDO_NOT_ALLOWED", "The source audit entry is no longer undoable")
+
+    target_snapshot = action.payload or {}
+    changed_before: dict[str, list[dict]] = {}
+    changed_after: dict[str, list[dict]] = {}
+    with db.begin_nested():
+        for table in _UNDO_DELETE_ORDER:
+            model = _UNDO_MODELS[table]
+            before_rows = {str(row.get("id")): row for row in target_snapshot.get(table, [])}
+            after_rows = {str(row.get("id")): row for row in (source.after_snapshot or {}).get(table, [])}
+            for row_id in after_rows.keys() - before_rows.keys():
+                record = db.scalar(select(model).where(model.id == UUID(row_id)).with_for_update())
+                if record is None or getattr(record, "kitchen_id", kitchen.id) != kitchen.id:
+                    continue
+                if isinstance(record, PlanTask) and record.locked:
+                    raise AppError(409, "PLAN_CHANGED", "Undo cannot remove a locked plan task", {"task_id": row_id})
+                changed_before.setdefault(table, []).append(_snapshot_row(record))
+                db.delete(record)
+
+        for table in _UNDO_RESTORE_ORDER:
+            model = _UNDO_MODELS[table]
+            for row in target_snapshot.get(table, []):
+                row_id = UUID(str(row["id"]))
+                current = db.scalar(select(model).where(model.id == row_id).with_for_update())
+                if current is not None and getattr(current, "kitchen_id", kitchen.id) != kitchen.id:
+                    raise AppError(409, "PLAN_CHANGED", "Undo snapshot references another kitchen")
+                if isinstance(current, PlanTask) and current.locked:
+                    desired = {
+                        column.name: _restore_value(column, row.get(column.name))
+                        for column in model.__table__.columns
+                    }
+                    current_values = {
+                        column.name: getattr(current, column.name)
+                        for column in model.__table__.columns
+                    }
+                    if any(
+                        not _same_value(column, current_values[column.name], desired[column.name])
+                        for column in model.__table__.columns
+                    ):
+                        raise AppError(
+                            409,
+                            "PLAN_CHANGED",
+                            "Undo cannot move a locked plan task",
+                            {"task_id": str(row_id)},
+                        )
+                    continue
+                if current is not None:
+                    changed_before.setdefault(table, []).append(_snapshot_row(current))
+                values = {
+                    column.name: _restore_value(column, row.get(column.name))
+                    for column in model.__table__.columns
+                }
+                if current is None:
+                    current = model(**values)
+                    db.add(current)
+                else:
+                    for key, value in values.items():
+                        setattr(current, key, value)
+                changed_after.setdefault(table, []).append(dict(row))
+        db.flush()
+        for table in _UNDO_MODELS:
+            if table in changed_after or table in changed_before:
+                model = _UNDO_MODELS[table]
+                ids = {row["id"] for row in changed_before.get(table, []) + changed_after.get(table, [])}
+                changed_after[table] = [
+                    _snapshot_row(row)
+                    for row in db.scalars(
+                        select(model).where(model.id.in_([UUID(str(value)) for value in ids]))
+                    ).all()
+                ]
+    summary = f"Undid audit entry {source.id}; plan v{kitchen.plan_version} to v{kitchen.plan_version + 1}"
+    return (
+        ActionChangesOut(orders_affected=[], tasks_rescheduled=len(changed_after.get("plan_tasks", [])), summary=f"Restored state from audit {source.id}"),
+        [],
+        changed_before or {},
+        changed_after or {},
+        summary,
+    )
+
+
 APPLIERS = {
     ("recovery", "substitute"): _apply_substitute,
+    ("undo", None): _apply_undo,
 }
 
 
@@ -306,7 +447,7 @@ def approve_action(
         db,
         kitchen_id=kitchen.id,
         action_id=action.id,
-        event_type="action_executed",
+        event_type="undo_executed" if action.action_type == "undo" else "action_executed",
         actor="owner",
         summary=audit_summary,
         before_snapshot=before_snapshot if before_snapshot else None,
