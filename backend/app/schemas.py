@@ -255,6 +255,60 @@ class ProposedActionListResponse(BaseModel):
     count: int
 
 
+# Action Approval & Rejection schemas (Rest_API_Spec.md §3.12, §3.13)
+
+
+class ActionRejectRequest(BaseModel):
+    reason: str | None = None
+
+
+class ActionRejectActionOut(BaseModel):
+    id: UUID
+    status: Literal["rejected"] = "rejected"
+    decided_at: IsoDateTime
+
+
+class ActionRejectResponse(BaseModel):
+    action: ActionRejectActionOut
+    audit_id: UUID
+
+
+class ActionApproveRequest(BaseModel):
+    confirm_option_number: int
+    input_mode: Literal["voice", "click"] | None = None
+    transcript: str | None = None
+
+
+class ActionApproveActionOut(BaseModel):
+    id: UUID
+    status: Literal["executed"] = "executed"
+    executed_at: IsoDateTime
+
+
+class CustomerMessageOut(BaseModel):
+    order_id: UUID
+    customer_name: str
+    needs_consent: bool
+    message: str
+    whatsapp_url: str
+
+
+class ActionChangesOut(BaseModel):
+    orders_affected: list[str]
+    tasks_rescheduled: int
+    summary: str
+
+
+class ActionApproveResponse(BaseModel):
+    action: ActionApproveActionOut
+    plan_version_before: int
+    plan_version_after: int
+    audit_id: UUID
+    changes: ActionChangesOut
+    customer_messages: list[CustomerMessageOut]
+    expired_action_ids: list[UUID]
+
+
 # Risk Brief schemas
 
 
