@@ -8,6 +8,7 @@ from app.config import settings
 from app.errors import AppError
 from app.routers import (
     actions,
+    audit,
     brief,
     ingredients,
     menu,
@@ -27,6 +28,7 @@ app.add_middleware(
 )
 
 app.include_router(actions.router)
+app.include_router(audit.router)
 app.include_router(brief.router)
 app.include_router(ingredients.router)
 app.include_router(menu.router)
