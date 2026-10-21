@@ -65,18 +65,30 @@ def _apply_substitute(
             ing.updated_at = now
             after_snapshot["ingredients"] = [_snapshot_ingredient(ing)]
 
-    # 2. Fetch original and replacement ingredients for descriptions
+    # 2. Fetch original and replacement ingredients for descriptions (strictly kitchen-scoped)
     orig_ing = None
     if "ingredient_id" in payload:
         try:
-            orig_ing = db.get(Ingredient, UUID(str(payload["ingredient_id"])))
+            orig_id = UUID(str(payload["ingredient_id"]))
+            orig_ing = db.scalar(
+                select(Ingredient).where(
+                    Ingredient.id == orig_id,
+                    Ingredient.kitchen_id == kitchen.id,
+                )
+            )
         except (ValueError, TypeError):
             pass
 
     sub_ing = None
     if "substitute_ingredient_id" in payload:
         try:
-            sub_ing = db.get(Ingredient, UUID(str(payload["substitute_ingredient_id"])))
+            sub_id = UUID(str(payload["substitute_ingredient_id"]))
+            sub_ing = db.scalar(
+                select(Ingredient).where(
+                    Ingredient.id == sub_id,
+                    Ingredient.kitchen_id == kitchen.id,
+                )
+            )
         except (ValueError, TypeError):
             pass
 
@@ -98,15 +110,22 @@ def _apply_substitute(
             select(Order).where(
                 Order.kitchen_id == kitchen.id,
                 Order.id.in_(order_ids),
+                Order.status.not_in(["cancelled", "completed"]),
             )
         ).all()
         orders_map = {o.id: o for o in orders}
 
     customer_messages: list[CustomerMessageOut] = []
+    verified_order_ids: list[UUID] = []
+    seen_order_ids: set[UUID] = set()
     for oid in order_ids:
+        if oid in seen_order_ids:
+            continue
         order = orders_map.get(oid)
         if order is None:
             continue
+        seen_order_ids.add(oid)
+        verified_order_ids.append(order.id)
         msg_text = f"Hi {order.customer_name}, we are short of {orig_name}. May we use {sub_name} instead? Reply YES to confirm."
         text_encoded = urllib.parse.quote(msg_text)
         if order.customer_phone:
@@ -129,7 +148,7 @@ def _apply_substitute(
     if isinstance(action.impact, dict):
         late_orders = action.impact.get("late_orders", 0)
 
-    order_count = len(order_ids)
+    order_count = len(verified_order_ids)
     if orig_ing and sub_ing:
         action_summary_base = f"Swapped {orig_name} for {sub_name} in {order_count} orders"
     else:
@@ -141,7 +160,7 @@ def _apply_substitute(
         audit_summary += f" (transcript: {transcript})"
 
     changes = ActionChangesOut(
-        orders_affected=[str(oid) for oid in order_ids],
+        orders_affected=[str(oid) for oid in verified_order_ids],
         tasks_rescheduled=0,
         summary=changes_summary,
     )
@@ -164,10 +183,17 @@ def approve_action(
 ) -> ActionApproveResponse:
     kitchen = get_kitchen(db)
 
-    # 2. Lock and retrieve the action within the current kitchen
+    # 1. Lock kitchen first to establish a top-down lock hierarchy and prevent circular wait
+    kitchen_locked = db.scalar(
+        select(Kitchen).where(Kitchen.id == kitchen.id).with_for_update()
+    )
+    if kitchen_locked is None:
+        raise AppError(500, "INTERNAL_ERROR", "No kitchen configured")
+
+    # 2. Lock and retrieve the action within the locked kitchen
     action = db.scalar(
         select(ProposedAction)
-        .where(ProposedAction.id == action_id, ProposedAction.kitchen_id == kitchen.id)
+        .where(ProposedAction.id == action_id, ProposedAction.kitchen_id == kitchen_locked.id)
         .with_for_update()
     )
     if action is None:
@@ -209,10 +235,7 @@ def approve_action(
             {"expected": action.option_number, "provided": confirm_option_number},
         )
 
-    # 6. Lock the kitchen and validate base_plan_version
-    kitchen_locked = db.scalar(
-        select(Kitchen).where(Kitchen.id == kitchen.id).with_for_update()
-    )
+    # 6. Validate base_plan_version against locked kitchen
     if kitchen_locked.plan_version != action.base_plan_version:
         raise AppError(
             409,
@@ -223,7 +246,7 @@ def approve_action(
 
     # 7. Recompute the stock fingerprint using the existing _fingerprint helper and validate it
     ingredients = db.scalars(
-        select(Ingredient).where(Ingredient.kitchen_id == kitchen.id)
+        select(Ingredient).where(Ingredient.kitchen_id == kitchen_locked.id)
     ).all()
     current_fingerprint = _fingerprint(ingredients)
     if current_fingerprint != action.stock_fingerprint:
@@ -255,15 +278,16 @@ def approve_action(
         transcript=transcript,
     )
 
-    # Expire pending sibling actions in the same group
+    # Expire pending sibling actions in the same group in deterministic ID order
     siblings = db.scalars(
         select(ProposedAction)
         .where(
-            ProposedAction.kitchen_id == kitchen.id,
+            ProposedAction.kitchen_id == kitchen_locked.id,
             ProposedAction.group_id == action.group_id,
             ProposedAction.id != action.id,
             ProposedAction.status == "pending",
         )
+        .order_by(ProposedAction.id)
         .with_for_update()
     ).all()
     expired_action_ids: list[UUID] = []
