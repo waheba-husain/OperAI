@@ -340,10 +340,14 @@ def propose_recovery(
     for number, (kind, title, consent, payload, impact) in enumerate(candidates, start=1):
         if stock_update is not None:
             payload["stock_update"] = stock_update
+        stored_impact = impact.model_dump(mode="json")
+        # Keep the do-nothing baseline with the proposal so day summaries can
+        # calculate protected revenue from the same simulation after approval.
+        stored_impact["revenue_at_risk_without_action"] = float(baseline_revenue)
         action = ProposedAction(
             id=uuid4(), kitchen_id=kitchen.id, group_id=group_id, option_number=number,
             action_type="recovery", title=title, payload=payload,
-            impact=impact.model_dump(mode="json"), status="pending",
+            impact=stored_impact, status="pending",
             base_plan_version=kitchen.plan_version, stock_fingerprint=fingerprint,
             created_at=now, expires_at=expires_at,
         )

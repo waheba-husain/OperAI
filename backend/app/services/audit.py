@@ -1,15 +1,17 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session, aliased
 
 from app.config import settings
 from app.errors import AppError
 from app.models import AuditLog, Ingredient, Kitchen, Order, OrderItem, PlanTask, ProposedAction
-from app.schemas import AuditEntryOut, AuditListResponse, UndoActionOut, UndoActionResponse
+from app.schemas import AuditEntryOut, AuditListResponse, DaySummaryResponse, UndoActionOut, UndoActionResponse
 from app.services.kitchen import get_kitchen
 from app.services.recovery import _fingerprint
+from app.timeutil import IST, day_bounds
 
 
 def record_audit_log(
@@ -94,6 +96,149 @@ def list_audit(
             values["after_snapshot"] = row.after_snapshot
         data.append(AuditEntryOut(**values))
     return AuditListResponse(data=data, count=len(data))
+
+
+def _impact_decimal(action: ProposedAction, field: str, *, nonnegative: bool = False) -> Decimal:
+    value = action.impact.get(field) if isinstance(action.impact, dict) else None
+    if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
+        raise AppError(
+            500,
+            "INTERNAL_ERROR",
+            "An executed recovery action has incomplete impact data",
+            {"action_id": str(action.id), "field": field},
+        )
+    try:
+        result = Decimal(str(value))
+    except InvalidOperation:
+        result = Decimal("NaN")
+    if not result.is_finite() or (nonnegative and result < 0):
+        raise AppError(
+            500,
+            "INTERNAL_ERROR",
+            "An executed recovery action has invalid impact data",
+            {"action_id": str(action.id), "field": field},
+        )
+    return result
+
+
+def _impact_count(action: ProposedAction, field: str) -> int:
+    value = action.impact.get(field) if isinstance(action.impact, dict) else None
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise AppError(
+            500,
+            "INTERNAL_ERROR",
+            "An executed recovery action has invalid impact data",
+            {"action_id": str(action.id), "field": field},
+        )
+    return value
+
+
+def get_day_summary(db: Session, *, target_date: date | None = None) -> DaySummaryResponse:
+    kitchen = get_kitchen(db)
+    target_date = target_date or datetime.now(IST).date()
+    start, end = day_bounds(target_date)
+
+    executed_rows = db.execute(
+        select(AuditLog, ProposedAction)
+        .join(ProposedAction, AuditLog.action_id == ProposedAction.id)
+        .where(
+            AuditLog.kitchen_id == kitchen.id,
+            AuditLog.event_type == "action_executed",
+            AuditLog.created_at >= start,
+            AuditLog.created_at < end,
+            ProposedAction.kitchen_id == kitchen.id,
+            ProposedAction.action_type == "recovery",
+            ProposedAction.status == "executed",
+        )
+        .order_by(AuditLog.created_at, AuditLog.id)
+    ).all()
+
+    undo_rows = db.execute(
+        select(AuditLog, ProposedAction)
+        .join(ProposedAction, AuditLog.action_id == ProposedAction.id)
+        .where(
+            AuditLog.kitchen_id == kitchen.id,
+            AuditLog.event_type == "undo_executed",
+            AuditLog.created_at >= start,
+            AuditLog.created_at < end,
+            ProposedAction.kitchen_id == kitchen.id,
+            ProposedAction.action_type == "undo",
+            ProposedAction.status == "executed",
+        )
+    ).all()
+    actions_undone = len(undo_rows)
+
+    SourceAudit = aliased(AuditLog)
+    SourceAction = aliased(ProposedAction)
+    all_undo_rows = db.execute(
+        select(ProposedAction.undo_of_audit_id)
+        .join(AuditLog, AuditLog.action_id == ProposedAction.id)
+        .join(SourceAudit, ProposedAction.undo_of_audit_id == SourceAudit.id)
+        .join(SourceAction, SourceAudit.action_id == SourceAction.id)
+        .where(
+            AuditLog.kitchen_id == kitchen.id,
+            AuditLog.event_type == "undo_executed",
+            ProposedAction.kitchen_id == kitchen.id,
+            ProposedAction.action_type == "undo",
+            ProposedAction.status == "executed",
+            SourceAudit.event_type == "action_executed",
+            SourceAction.kitchen_id == kitchen.id,
+            SourceAction.action_type == "recovery",
+            SourceAction.status == "executed",
+        )
+    ).all()
+    undone_audit_ids = {row[0] for row in all_undo_rows}
+
+    orders_total = 0
+    orders_completed = 0
+    orders_protected = 0
+    revenue_protected = Decimal("0.00")
+    net_extra_cost = Decimal("0.00")
+    if executed_rows or undo_rows:
+        order_scope = (
+            Order.kitchen_id == kitchen.id,
+            Order.deadline >= start,
+            Order.deadline < end,
+            Order.status != "cancelled",
+        )
+        orders_total = db.scalar(select(func.count(Order.id)).where(*order_scope)) or 0
+        orders_completed = db.scalar(
+            select(func.count(Order.id)).where(*order_scope, Order.status == "completed")
+        ) or 0
+
+    for audit, action in executed_rows:
+        baseline_late = _impact_count(action, "orders_protected") + _impact_count(action, "late_orders")
+        option_late = _impact_count(action, "late_orders")
+        baseline_revenue = _impact_decimal(
+            action, "revenue_at_risk_without_action", nonnegative=True
+        )
+        option_revenue = _impact_decimal(action, "revenue_at_risk_after", nonnegative=True)
+        extra_cost = _impact_decimal(action, "extra_cost")
+        protected_revenue = baseline_revenue - option_revenue
+        if protected_revenue < 0:
+            raise AppError(
+                500,
+                "INTERNAL_ERROR",
+                "An executed recovery action has inconsistent impact data",
+                {"action_id": str(action.id), "field": "revenue_at_risk_after"},
+            )
+        net_extra_cost += extra_cost
+        if audit.id in undone_audit_ids:
+            continue
+        orders_protected += baseline_late - option_late
+        revenue_protected += protected_revenue
+
+    return DaySummaryResponse(
+        date=target_date.isoformat(),
+        orders_total=orders_total,
+        orders_completed=orders_completed,
+        actions_executed=len(executed_rows),
+        actions_undone=actions_undone,
+        orders_protected=orders_protected,
+        revenue_protected=revenue_protected.quantize(Decimal("0.01")),
+        net_extra_cost=net_extra_cost.quantize(Decimal("0.01")),
+        data_source=kitchen.data_source,
+    )
 
 
 def propose_undo(db: Session, *, audit_id: UUID) -> UndoActionResponse:

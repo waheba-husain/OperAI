@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Literal
 from uuid import UUID
 
@@ -7,8 +8,8 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.deps import require_api_key
-from app.schemas import AuditListResponse, UndoActionResponse
-from app.services.audit import list_audit, propose_undo
+from app.schemas import AuditListResponse, DaySummaryResponse, UndoActionResponse
+from app.services.audit import get_day_summary, list_audit, propose_undo
 
 router = APIRouter(tags=["audit"], dependencies=[Depends(require_api_key)])
 
@@ -21,6 +22,14 @@ def get_audit(
     include_snapshots: bool = Query(default=False),
 ) -> AuditListResponse:
     return list_audit(db, limit=limit, event_type=event_type, include_snapshots=include_snapshots)
+
+
+@router.get("/api/summary", response_model=DaySummaryResponse)
+def get_summary(
+    date: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> DaySummaryResponse:
+    return get_day_summary(db, target_date=date)
 
 
 @router.post("/api/audit/{id}/undo", response_model=UndoActionResponse, status_code=status.HTTP_201_CREATED)
