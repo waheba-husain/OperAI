@@ -81,6 +81,11 @@ export function AppLayout({ theme, toggleTheme }: AppLayoutProps) {
     setIsChatOpen(false)
   }
 
+  const handleNavigateFromChat = (page: PageId) => {
+    handleNavigate(page)
+    handleCloseChat()
+  }
+
   /* Close sidebar when viewport grows to desktop width */
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 768px)')
@@ -158,6 +163,7 @@ export function AppLayout({ theme, toggleTheme }: AppLayoutProps) {
         triggerRef={chatButtonRef}
         isMuted={isMuted}
         onToggleMute={handleToggleMute}
+        onNavigate={handleNavigateFromChat}
       />
     </div>
   )

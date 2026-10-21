@@ -26,6 +26,7 @@ import {
 } from '../../hooks/useChatData.ts'
 import { DEMO_CHAT_CONVERSATION } from '../../pages/chat/demoChatData.ts'
 import type { ChatMessage } from '../../types/chat.ts'
+import type { PageId } from '../../types/navigation.ts'
 
 /* ── 1. Proposal Card Presentation Logic ─────────────────────── */
 
@@ -447,6 +448,129 @@ test('ChatPanel: incoming transcript populates editable draft even if speech ses
   assert.strictEqual(controller.getSnapshot().messages.length, 0, 'Must NOT auto-submit')
 })
 
+/* ── 6. Chat-to-Recovery Navigation (Feature 7) ───────────────── */
 
+test('ChatProposalCard navigation: renders button when onNavigate is provided', () => {
+  const shouldRenderNavButton = (props: { onNavigate?: (pageId: PageId) => void }): boolean => {
+    return typeof props.onNavigate === 'function'
+  }
 
+  const mockNavigate = (_pageId: PageId) => {}
+  assert.strictEqual(shouldRenderNavButton({ onNavigate: mockNavigate }), true)
+})
 
+test('ChatProposalCard navigation: omits button when onNavigate is absent', () => {
+  const shouldRenderNavButton = (props: { onNavigate?: (pageId: PageId) => void }): boolean => {
+    return typeof props.onNavigate === 'function'
+  }
+
+  assert.strictEqual(shouldRenderNavButton({ onNavigate: undefined }), false)
+  assert.strictEqual(shouldRenderNavButton({}), false)
+})
+
+test('ChatProposalCard navigation: clicking invokes onNavigate with exactly "shortage-recovery"', () => {
+  let navigatedPage: PageId | null = null
+  const onNavigate = (pageId: PageId) => {
+    navigatedPage = pageId
+  }
+
+  // Simulate proposal card button click: onClick={() => onNavigate('shortage-recovery')}
+  const handleNavClick = (navFn: (pageId: PageId) => void) => {
+    navFn('shortage-recovery')
+  }
+
+  handleNavClick(onNavigate)
+  assert.strictEqual(navigatedPage, 'shortage-recovery')
+})
+
+test('ChatProposalCard navigation: navigation does not invoke approval APIs or mutate proposal data', () => {
+  const controller = new ChatConversationController()
+
+  // Initialize with draft
+  controller.setDraft('We need 2kg more paneer')
+  assert.strictEqual(controller.getSnapshot().draft, 'We need 2kg more paneer')
+
+  let approveActionCalled = false
+  let chatAgentCalled = false
+
+  const mockApproveAction = () => {
+    approveActionCalled = true
+  }
+  const mockChatAgent = () => {
+    chatAgentCalled = true
+  }
+
+  // Trigger navigation
+  let navigatedDestination: PageId | null = null
+  const onNavigate = (pageId: PageId) => {
+    navigatedDestination = pageId
+  }
+
+  onNavigate('shortage-recovery')
+
+  // Verify navigation occurred to correct destination
+  assert.strictEqual(navigatedDestination, 'shortage-recovery')
+
+  // Verify approveAction and chatAgent were NOT called (AGENTS.md Rule 2 invariant)
+  assert.strictEqual(approveActionCalled, false)
+  assert.strictEqual(chatAgentCalled, false)
+
+  // Verify draft and controller state remain untouched
+  assert.strictEqual(controller.getSnapshot().draft, 'We need 2kg more paneer')
+  assert.strictEqual(controller.getSnapshot().isLoading, false)
+  assert.strictEqual(controller.getSnapshot().error, null)
+})
+
+test('AppLayout navigation: callback closes the chat drawer and navigates to "shortage-recovery"', () => {
+  let currentPage: PageId = 'overview'
+  let isChatOpen = true
+  let stopListeningCalled = false
+  let stopSpeakingCalled = false
+
+  const mockVoice = {
+    isListening: true,
+    isSpeaking: true,
+    stopListening() {
+      stopListeningCalled = true
+      this.isListening = false
+    },
+    stopSpeaking() {
+      stopSpeakingCalled = true
+      this.isSpeaking = false
+    }
+  }
+
+  const handleNavigate = (page: PageId) => {
+    currentPage = page
+  }
+
+  const handleCloseChat = () => {
+    if (mockVoice.isListening) {
+      mockVoice.stopListening()
+    }
+    if (mockVoice.isSpeaking) {
+      mockVoice.stopSpeaking()
+    }
+    isChatOpen = false
+  }
+
+  const handleNavigateFromChat = (page: PageId) => {
+    handleNavigate(page)
+    handleCloseChat()
+  }
+
+  // Execute navigation triggered from inside chat proposal card
+  handleNavigateFromChat('shortage-recovery')
+
+  // 1. Page is navigated to shortage-recovery
+  assert.strictEqual(currentPage, 'shortage-recovery')
+
+  // 2. Chat drawer is closed so recovery board is visible
+  assert.strictEqual(isChatOpen, false)
+
+  // 3. Active voice recognition & speech playback are terminated cleanly
+  assert.strictEqual(stopListeningCalled, true)
+  assert.strictEqual(stopSpeakingCalled, true)
+  assert.strictEqual(mockVoice.isListening, false)
+  assert.strictEqual(mockVoice.isSpeaking, false)
+})

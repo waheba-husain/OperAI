@@ -19,6 +19,7 @@ import { useState, useEffect, useRef } from 'react'
 import type { UseChatDataReturn } from '../../hooks/useChatData.ts'
 import type { UseVoiceReturn } from '../../hooks/useVoice.ts'
 import type { ChatInputMode } from '../../types/chat.ts'
+import type { PageId } from '../../types/navigation.ts'
 import { ChatMessageList } from './ChatMessageList.tsx'
 import { ChatInputBar } from './ChatInputBar.tsx'
 import './ChatPanel.css'
@@ -40,6 +41,7 @@ export interface ChatPanelProps {
   readonly className?: string
   readonly isMuted?: boolean
   readonly onToggleMute?: () => void
+  readonly onNavigate?: (pageId: PageId) => void
 }
 
 export function ChatPanel({
@@ -50,7 +52,8 @@ export function ChatPanel({
   subtitle,
   className = '',
   isMuted: propIsMuted,
-  onToggleMute: propOnToggleMute
+  onToggleMute: propOnToggleMute,
+  onNavigate
 }: ChatPanelProps) {
   const [internalMuted, setInternalMuted] = useState(false)
   const isMuted = propIsMuted ?? internalMuted
@@ -293,6 +296,7 @@ export function ChatPanel({
           onClearError={() => chatData.clearError()}
           onSelectPrompt={(prompt) => chatData.applySuggestedPrompt(prompt)}
           isDemoMode={isDemo}
+          onNavigate={onNavigate}
         />
       </div>
 

@@ -16,6 +16,7 @@
 import { useEffect, useRef, type MouseEvent, type RefObject } from 'react'
 import type { UseChatDataReturn } from '../../hooks/useChatData.ts'
 import type { UseVoiceReturn } from '../../hooks/useVoice.ts'
+import type { PageId } from '../../types/navigation.ts'
 import { ChatPanel } from './ChatPanel.tsx'
 import './ChatDrawer.css'
 
@@ -27,6 +28,7 @@ export interface ChatDrawerProps {
   readonly triggerRef?: RefObject<HTMLButtonElement | null>
   readonly isMuted?: boolean
   readonly onToggleMute?: () => void
+  readonly onNavigate?: (pageId: PageId) => void
 }
 
 export function ChatDrawer({
@@ -36,7 +38,8 @@ export function ChatDrawer({
   voice,
   triggerRef,
   isMuted,
-  onToggleMute
+  onToggleMute,
+  onNavigate
 }: ChatDrawerProps) {
   const drawerRef = useRef<HTMLDivElement | null>(null)
 
@@ -132,6 +135,7 @@ export function ChatDrawer({
           title="OperAI Assistant"
           isMuted={isMuted}
           onToggleMute={onToggleMute}
+          onNavigate={onNavigate}
         />
       </div>
     </div>

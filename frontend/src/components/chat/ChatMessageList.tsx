@@ -9,6 +9,7 @@
 
 import { useEffect, useRef } from 'react'
 import type { ChatMessage } from '../../types/chat.ts'
+import type { PageId } from '../../types/navigation.ts'
 import { SUGGESTED_CHAT_PROMPTS } from '../../hooks/useChatData.ts'
 import { ChatProposalCard } from './ChatProposalCard.tsx'
 import './ChatMessageList.css'
@@ -22,6 +23,7 @@ export interface ChatMessageListProps {
   readonly onSelectPrompt?: (prompt: string) => void
   readonly isDemoMode?: boolean
   readonly className?: string
+  readonly onNavigate?: (pageId: PageId) => void
 }
 
 function formatMessageTime(isoString?: string): string {
@@ -43,7 +45,8 @@ export function ChatMessageList({
   onClearError,
   onSelectPrompt,
   isDemoMode = false,
-  className = ''
+  className = '',
+  onNavigate
 }: ChatMessageListProps) {
   const bottomRef = useRef<HTMLDivElement | null>(null)
 
@@ -153,6 +156,7 @@ export function ChatMessageList({
                   confirmPhrases={msg.confirmPhrases}
                   requiresConfirmation={msg.requiresConfirmation}
                   isSimulated={msg.isSimulated}
+                  onNavigate={onNavigate}
                 />
               )}
 

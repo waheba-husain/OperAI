@@ -15,6 +15,7 @@
       the Shortage & Recovery review board.
    ============================================================ */
 
+import type { PageId } from '../../types/navigation.ts'
 import './ChatProposalCard.css'
 
 export interface ChatProposalCardProps {
@@ -24,6 +25,7 @@ export interface ChatProposalCardProps {
   readonly requiresConfirmation?: boolean
   readonly isSimulated?: boolean
   readonly className?: string
+  readonly onNavigate?: (pageId: PageId) => void
 }
 
 export function ChatProposalCard({
@@ -32,7 +34,8 @@ export function ChatProposalCard({
   confirmPhrases = [],
   requiresConfirmation = false,
   isSimulated = false,
-  className = ''
+  className = '',
+  onNavigate
 }: ChatProposalCardProps) {
   const hasValidGroupId = typeof actionGroupId === 'string' && actionGroupId.trim().length > 0
   const hasValidActionIds = Array.isArray(optionActionIds) && optionActionIds.length > 0
@@ -110,6 +113,33 @@ export function ChatProposalCard({
             ))}
           </div>
         </>
+      )}
+
+      {onNavigate && (
+        <div className="chat-proposal-card__actions">
+          <button
+            type="button"
+            className="chat-proposal-card__nav-button"
+            onClick={() => onNavigate('shortage-recovery')}
+            aria-label="View proposal in Shortage and Recovery board"
+          >
+            <span>View in Shortage & Recovery</span>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <line x1="5" y1="12" x2="19" y2="12" />
+              <polyline points="12 5 19 12 12 19" />
+            </svg>
+          </button>
+        </div>
       )}
 
       <div className="chat-proposal-card__disclaimer">

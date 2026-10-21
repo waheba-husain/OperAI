@@ -34,9 +34,14 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import type { ApiClient } from '../api/client.ts'
-import { chatAgent } from '../api/endpoints.ts'
+import { approveAction, chatAgent } from '../api/endpoints.ts'
+import { formatActionErrorMessage } from '../api/adapters/actionAdapter.ts'
 import { ApiError, ConfigurationError, NetworkError } from '../api/errors.ts'
-import type { AgentChatResponseDTO } from '../types/dto.ts'
+import type {
+  ActionApproveRequestDTO,
+  ActionApproveResponseDTO,
+  AgentChatResponseDTO
+} from '../types/dto.ts'
 import type {
   ChatMessage,
   ChatConfirmationPrompt,
@@ -48,6 +53,76 @@ import {
 } from '../pages/chat/demoChatData.ts'
 
 export type ChatMode = 'live' | 'demo'
+
+const WORD_TO_NUMBER: Record<string, number> = {
+  zero: 0,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10
+}
+
+/**
+ * Parses an explicit confirmation command (e.g. "confirm option 2").
+ * Returns the requested option number and raw matched text, or null if not an explicit confirmation.
+ * CRITICAL SAFETY (AGENTS.md Rule 2):
+ * Does NOT match ambiguous messages or messages that merely mention options.
+ */
+export function parseConfirmationPhrase(
+  text: string,
+  confirmPhrases?: readonly string[]
+): { optionNumber: number; rawText: string } | null {
+  if (typeof text !== 'string') return null
+  const cleaned = text.trim()
+  if (!cleaned) return null
+
+  // Strip optional trailing punctuation (. ! ?)
+  const normalized = cleaned.replace(/[.!?]+$/, '').trim()
+
+  // Match: "(yes,) (please) confirm/approve option <N> (please)"
+  const match = normalized.match(
+    /^(?:yes,?\s+)?(?:please\s+)?(?:confirm|approve)\s+option\s+(\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten)(?:\s+please)?$/i
+  )
+  if (match) {
+    const numPart = match[1].toLowerCase()
+    let optionNumber: number
+    if (/^\d+$/.test(numPart)) {
+      optionNumber = parseInt(numPart, 10)
+    } else {
+      optionNumber = WORD_TO_NUMBER[numPart] ?? -1
+    }
+
+    if (Number.isSafeInteger(optionNumber) && optionNumber >= 0) {
+      return { optionNumber, rawText: cleaned }
+    }
+  }
+
+  // Also check if text matches one of the active confirmPhrases
+  if (confirmPhrases && confirmPhrases.length > 0) {
+    const lower = normalized.toLowerCase()
+    for (const phrase of confirmPhrases) {
+      const phraseNorm = phrase.trim().replace(/[.!?]+$/, '').toLowerCase()
+      if (phraseNorm === lower) {
+        const phraseMatch = phrase.match(/option\s+(\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten)/i)
+        if (phraseMatch) {
+          const numPart = phraseMatch[1].toLowerCase()
+          const optionNumber = /^\d+$/.test(numPart) ? parseInt(numPart, 10) : (WORD_TO_NUMBER[numPart] ?? -1)
+          if (optionNumber >= 0) {
+            return { optionNumber, rawText: cleaned }
+          }
+        }
+      }
+    }
+  }
+
+  return null
+}
 
 export const MAX_CHAT_MESSAGE_LENGTH = 500
 
@@ -130,6 +205,7 @@ export interface UseChatDataOptions {
   readonly initialDraft?: string
   readonly onMessageSent?: (message: ChatMessage) => void
   readonly onAssistantReply?: (message: ChatMessage) => void
+  readonly onActionApproved?: (response: ActionApproveResponseDTO) => void
   readonly onError?: (error: Error) => void
 }
 
@@ -175,14 +251,19 @@ export class ChatConversationController {
   private onStateChange?: (snapshot: ChatConversationSnapshot) => void
   private onMessageSent?: (message: ChatMessage) => void
   private onAssistantReply?: (message: ChatMessage) => void
+  private onActionApproved?: (response: ActionApproveResponseDTO) => void
   private onError?: (error: Error) => void
 
   constructor(options?: ChatConversationControllerOptions) {
     this.client = options?.client
     this.mode = options?.initialMode ?? 'live'
-    this.liveMessages = options?.initialMessages ? [...options.initialMessages] : []
-    // Initialize demo messages with simulated demo conversation
-    this.demoMessages = [...DEMO_CHAT_CONVERSATION]
+    this.liveMessages = options?.initialMessages && this.mode === 'live'
+      ? [...options.initialMessages]
+      : []
+    // Initialize demo messages with simulated demo conversation (or custom initial messages if provided in demo mode)
+    this.demoMessages = options?.initialMessages && this.mode === 'demo'
+      ? [...options.initialMessages]
+      : [...DEMO_CHAT_CONVERSATION]
     this.draft = options?.initialDraft ?? ''
     this.draftInputMode = 'text'
     this.isLoading = false
@@ -193,6 +274,7 @@ export class ChatConversationController {
     this.onStateChange = options?.onStateChange
     this.onMessageSent = options?.onMessageSent
     this.onAssistantReply = options?.onAssistantReply
+    this.onActionApproved = options?.onActionApproved
     this.onError = options?.onError
 
     // Sync initial active confirmation if initial messages end in a confirmation prompt
@@ -208,6 +290,7 @@ export class ChatConversationController {
     this.client = options.client
     this.onMessageSent = options.onMessageSent
     this.onAssistantReply = options.onAssistantReply
+    this.onActionApproved = options.onActionApproved
     this.onError = options.onError
   }
 
@@ -401,13 +484,414 @@ export class ChatConversationController {
       return false
     }
 
-    // 3. Demo Mode Handling (Offline deterministic flow, strictly no live network calls)
+    // 3. Explicit Recovery Option Confirmation Check
+    // When user submits an explicit confirmation command (e.g. "confirm option 2"),
+    // verify active confirmation proposal and resolve action ID to call approveAction.
+    const confirmationMatch = parseConfirmationPhrase(messageText, this.activeConfirmation?.confirmPhrases)
+    if (confirmationMatch) {
+      if (this.mode === 'demo') {
+        return this.handleDemoConfirmation(messageText, inputMode, confirmationMatch.optionNumber, options)
+      }
+      return this.handleLiveConfirmation(messageText, inputMode, confirmationMatch.optionNumber, options)
+    }
+
+    // 4. Demo Mode Handling (Offline deterministic flow, strictly no live network calls)
     if (this.mode === 'demo') {
       return this.handleDemoSubmission(messageText, inputMode, options)
     }
 
-    // 4. Live Mode Handling
+    // 5. Live Mode Handling
     return this.handleLiveSubmission(messageText, inputMode, options)
+  }
+
+  private handleDemoConfirmation(
+    messageText: string,
+    inputMode: ChatInputMode,
+    optionNumber: number,
+    options?: SendMessageOptions
+  ): boolean {
+    const userMsg: ChatMessage = {
+      id: generateChatMessageId('demo-user'),
+      sender: 'user',
+      text: messageText,
+      timestamp: new Date().toISOString(),
+      inputMode,
+      isSimulated: true,
+      status: 'sent'
+    }
+    this.demoMessages.push(userMsg)
+
+    // Check whether valid active confirmation proposal exists
+    if (!this.activeConfirmation || !this.activeConfirmation.requiresConfirmation) {
+      const err = new ApiError(409, {
+        code: 'NO_ACTIVE_PROPOSAL',
+        message: 'No active recovery proposal to confirm.'
+      })
+      this.error = err
+      this.errorMessage = err.message
+      const assistantMsg: ChatMessage = {
+        id: generateChatMessageId('demo-assistant'),
+        sender: 'assistant',
+        text: 'There is no active recovery proposal to confirm. Please request recovery options first.',
+        timestamp: new Date().toISOString(),
+        intent: 'clarification',
+        toolUsed: null,
+        requiresConfirmation: false,
+        confirmPhrases: [],
+        isSimulated: true,
+        status: 'sent'
+      }
+      this.demoMessages.push(assistantMsg)
+      this.emitState()
+      this.onMessageSent?.(userMsg)
+      this.onAssistantReply?.(assistantMsg)
+      return false
+    }
+
+    const optionActionIds = this.activeConfirmation.optionActionIds
+    const optionIndex = optionNumber - 1
+
+    if (!optionActionIds || optionActionIds.length === 0) {
+      const err = new ApiError(422, {
+        code: 'MISSING_ACTION_ID',
+        message: 'No action IDs found for the active recovery proposal.'
+      })
+      this.error = err
+      this.errorMessage = err.message
+      this.emitState()
+      this.onMessageSent?.(userMsg)
+      return false
+    }
+
+    if (optionIndex < 0 || optionIndex >= optionActionIds.length) {
+      const err = new ApiError(422, {
+        code: 'OPTION_MISMATCH',
+        message: `Option ${optionNumber} is not a valid option. Available options: 1 to ${optionActionIds.length}.`
+      })
+      this.error = err
+      this.errorMessage = err.message
+      const assistantMsg: ChatMessage = {
+        id: generateChatMessageId('demo-assistant'),
+        sender: 'assistant',
+        text: `Option ${optionNumber} is not valid for this proposal. Please select from Option 1 to Option ${optionActionIds.length}.`,
+        timestamp: new Date().toISOString(),
+        intent: 'clarification',
+        toolUsed: null,
+        requiresConfirmation: false,
+        confirmPhrases: [],
+        isSimulated: true,
+        status: 'sent'
+      }
+      this.demoMessages.push(assistantMsg)
+      this.emitState()
+      this.onMessageSent?.(userMsg)
+      this.onAssistantReply?.(assistantMsg)
+      return false
+    }
+
+    const actionId = optionActionIds[optionIndex]
+    if (!actionId || typeof actionId !== 'string' || actionId.trim().length === 0) {
+      const err = new ApiError(422, {
+        code: 'MISSING_ACTION_ID',
+        message: `Action ID for Option ${optionNumber} is missing or invalid.`
+      })
+      this.error = err
+      this.errorMessage = err.message
+      const assistantMsg: ChatMessage = {
+        id: generateChatMessageId('demo-assistant'),
+        sender: 'assistant',
+        text: `Action ID for Option ${optionNumber} is missing or invalid.`,
+        timestamp: new Date().toISOString(),
+        intent: 'clarification',
+        toolUsed: null,
+        requiresConfirmation: false,
+        confirmPhrases: [],
+        isSimulated: true,
+        status: 'sent'
+      }
+      this.demoMessages.push(assistantMsg)
+      this.emitState()
+      this.onMessageSent?.(userMsg)
+      this.onAssistantReply?.(assistantMsg)
+      return false
+    }
+
+    // Demo Mode: MUST NOT execute real approval request per Requirement 12
+    const assistantMsg: ChatMessage = {
+      id: generateChatMessageId('demo-assistant'),
+      sender: 'assistant',
+      text: `Option ${optionNumber} confirmation received (Demo Mode). Action approval is simulated and disabled in Demo Mode — connect a live backend with an API key to approve and apply changes to the operational plan.`,
+      timestamp: new Date().toISOString(),
+      intent: 'approval_simulated',
+      toolUsed: null,
+      requiresConfirmation: false,
+      confirmPhrases: [],
+      isSimulated: true,
+      status: 'sent'
+    }
+    this.demoMessages.push(assistantMsg)
+    this.activeConfirmation = null
+
+    // Clear draft on success ONLY if user has not typed newer input while in flight
+    const submittedDraft = options?.message === undefined ? this.draft : null
+    if (submittedDraft !== null && this.draft === submittedDraft) {
+      this.draft = ''
+      this.draftInputMode = 'text'
+    }
+
+    this.error = null
+    this.errorMessage = null
+    this.emitState()
+
+    this.onMessageSent?.(userMsg)
+    this.onAssistantReply?.(assistantMsg)
+    return true
+  }
+
+  private async handleLiveConfirmation(
+    messageText: string,
+    inputMode: ChatInputMode,
+    optionNumber: number,
+    options?: SendMessageOptions
+  ): Promise<boolean> {
+    const submissionEpoch = this.liveEpoch
+    const submittedDraft = options?.message === undefined ? this.draft : null
+
+    // 1. Check whether valid active confirmation proposal exists
+    if (!this.activeConfirmation || !this.activeConfirmation.requiresConfirmation) {
+      const userMsg: ChatMessage = {
+        id: generateChatMessageId('live-user'),
+        sender: 'user',
+        text: messageText,
+        timestamp: new Date().toISOString(),
+        inputMode,
+        isSimulated: false,
+        status: 'error',
+        errorMessage: 'No active recovery proposal to confirm.'
+      }
+      this.liveMessages.push(userMsg)
+
+      const err = new ApiError(409, {
+        code: 'NO_ACTIVE_PROPOSAL',
+        message: 'No active recovery proposal to confirm.'
+      })
+      this.error = err
+      this.errorMessage = err.message
+      this.emitState()
+      this.onMessageSent?.(userMsg)
+      this.onError?.(err)
+      return false
+    }
+
+    // 2. Resolve option number to action ID using active proposal metadata
+    const optionActionIds = this.activeConfirmation.optionActionIds
+    const optionIndex = optionNumber - 1
+
+    if (!optionActionIds || optionActionIds.length === 0) {
+      const userMsg: ChatMessage = {
+        id: generateChatMessageId('live-user'),
+        sender: 'user',
+        text: messageText,
+        timestamp: new Date().toISOString(),
+        inputMode,
+        isSimulated: false,
+        status: 'error',
+        errorMessage: 'No action IDs found for the active recovery proposal.'
+      }
+      this.liveMessages.push(userMsg)
+
+      const err = new ApiError(422, {
+        code: 'MISSING_ACTION_ID',
+        message: 'No action IDs found for the active recovery proposal.'
+      })
+      this.error = err
+      this.errorMessage = err.message
+      this.emitState()
+      this.onMessageSent?.(userMsg)
+      this.onError?.(err)
+      return false
+    }
+
+    if (optionIndex < 0 || optionIndex >= optionActionIds.length) {
+      const userMsg: ChatMessage = {
+        id: generateChatMessageId('live-user'),
+        sender: 'user',
+        text: messageText,
+        timestamp: new Date().toISOString(),
+        inputMode,
+        isSimulated: false,
+        status: 'error',
+        errorMessage: `Option ${optionNumber} is not a valid option. Available options: 1 to ${optionActionIds.length}.`
+      }
+      this.liveMessages.push(userMsg)
+
+      const err = new ApiError(422, {
+        code: 'OPTION_MISMATCH',
+        message: `Option ${optionNumber} is not a valid option. Available options: 1 to ${optionActionIds.length}.`
+      })
+      this.error = err
+      this.errorMessage = err.message
+      this.emitState()
+      this.onMessageSent?.(userMsg)
+      this.onError?.(err)
+      return false
+    }
+
+    const actionId = optionActionIds[optionIndex]
+    if (!actionId || typeof actionId !== 'string' || actionId.trim().length === 0) {
+      const userMsg: ChatMessage = {
+        id: generateChatMessageId('live-user'),
+        sender: 'user',
+        text: messageText,
+        timestamp: new Date().toISOString(),
+        inputMode,
+        isSimulated: false,
+        status: 'error',
+        errorMessage: `Action ID for Option ${optionNumber} is missing or invalid.`
+      }
+      this.liveMessages.push(userMsg)
+
+      const err = new ApiError(422, {
+        code: 'MISSING_ACTION_ID',
+        message: `Action ID for Option ${optionNumber} is missing or invalid.`
+      })
+      this.error = err
+      this.errorMessage = err.message
+      this.emitState()
+      this.onMessageSent?.(userMsg)
+      this.onError?.(err)
+      return false
+    }
+
+    // 3. User message valid -> start approval dispatch
+    const userMsg: ChatMessage = {
+      id: generateChatMessageId('live-user'),
+      sender: 'user',
+      text: messageText,
+      timestamp: new Date().toISOString(),
+      inputMode,
+      isSimulated: false,
+      status: 'sending'
+    }
+
+    this.liveMessages.push(userMsg)
+    this.isLoading = true
+    this.error = null
+    this.errorMessage = null
+    this.emitState()
+    this.onMessageSent?.(userMsg)
+
+    this.abortController = new AbortController()
+
+    try {
+      const approvePayload: ActionApproveRequestDTO = {
+        confirm_option_number: optionNumber,
+        input_mode: inputMode === 'voice' ? 'voice' : 'click',
+        transcript: messageText
+      }
+
+      const response = await approveAction(
+        actionId,
+        approvePayload,
+        { client: this.client, signal: this.abortController.signal }
+      )
+
+      if (this.isDestroyed) return false
+
+      if (this.liveEpoch !== submissionEpoch) {
+        this.isLoading = false
+        this.emitState()
+        return false
+      }
+
+      // Mark user message as sent
+      const userIndex = this.liveMessages.findIndex((m) => m.id === userMsg.id)
+      if (userIndex !== -1) {
+        this.liveMessages[userIndex] = { ...this.liveMessages[userIndex], status: 'sent' }
+      }
+
+      // Construct assistant response using actual API response
+      const summaryText = response.changes?.summary
+      const customerMsgCount = response.customer_messages?.length ?? 0
+      const customerNote = customerMsgCount > 0 ? ` ${customerMsgCount} customer message(s) drafted.` : ''
+      const replyText = summaryText
+        ? `Option ${optionNumber} approved. ${summaryText}. Plan updated to version ${response.plan_version_after}.${customerNote}`
+        : `Option ${optionNumber} approved. Plan updated to version ${response.plan_version_after}.${customerNote}`
+
+      const assistantMsg: ChatMessage = {
+        id: generateChatMessageId('live-assistant'),
+        sender: 'assistant',
+        text: replyText,
+        timestamp: new Date().toISOString(),
+        intent: 'approval_confirmed',
+        toolUsed: 'approve_action',
+        requiresConfirmation: false,
+        confirmPhrases: [],
+        isSimulated: false,
+        status: 'sent'
+      }
+
+      this.liveMessages.push(assistantMsg)
+
+      // Clear active confirmation once executed
+      this.activeConfirmation = null
+
+      if (submittedDraft !== null && this.draft === submittedDraft) {
+        this.draft = ''
+        this.draftInputMode = 'text'
+      }
+
+      this.isLoading = false
+      this.error = null
+      this.errorMessage = null
+      this.emitState()
+
+      this.onAssistantReply?.(assistantMsg)
+      this.onActionApproved?.(response)
+      return true
+    } catch (err: unknown) {
+      if (this.isDestroyed) return false
+
+      if (this.liveEpoch !== submissionEpoch) {
+        this.isLoading = false
+        this.emitState()
+        return false
+      }
+
+      const resolvedError =
+        err instanceof ApiError || err instanceof ConfigurationError || err instanceof NetworkError
+          ? err
+          : new Error(err instanceof Error ? err.message : String(err))
+
+      const formattedErrorMsg = formatActionErrorMessage(resolvedError)
+
+      const userIndex = this.liveMessages.findIndex((m) => m.id === userMsg.id)
+      if (userIndex !== -1) {
+        this.liveMessages[userIndex] = {
+          ...this.liveMessages[userIndex],
+          status: 'error',
+          errorMessage: formattedErrorMsg
+        }
+      }
+
+      this.isLoading = false
+
+      if (this.mode === 'live') {
+        this.error = resolvedError
+        this.errorMessage = formattedErrorMsg
+      }
+
+      // If action is expired or not pending (409), clear stale confirmation
+      if (resolvedError instanceof ApiError && resolvedError.status === 409) {
+        this.activeConfirmation = null
+      }
+
+      this.emitState()
+      this.onError?.(resolvedError as Error)
+      return false
+    } finally {
+      this.abortController = null
+    }
   }
 
   private handleDemoSubmission(
