@@ -15,13 +15,21 @@
    4. Speech recognition populates the editable draft; never auto-submits.
    ============================================================ */
 
-import { useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { UseChatDataReturn } from '../../hooks/useChatData.ts'
 import type { UseVoiceReturn } from '../../hooks/useVoice.ts'
 import type { ChatInputMode } from '../../types/chat.ts'
 import { ChatMessageList } from './ChatMessageList.tsx'
 import { ChatInputBar } from './ChatInputBar.tsx'
 import './ChatPanel.css'
+
+import {
+  processAssistantSpeechPlayback,
+  type AssistantSpeechPlaybackOptions
+} from './assistantSpeechPlayback.ts'
+
+export { processAssistantSpeechPlayback }
+export type { AssistantSpeechPlaybackOptions }
 
 export interface ChatPanelProps {
   readonly chatData: UseChatDataReturn
@@ -30,6 +38,8 @@ export interface ChatPanelProps {
   readonly title?: string
   readonly subtitle?: string
   readonly className?: string
+  readonly isMuted?: boolean
+  readonly onToggleMute?: () => void
 }
 
 export function ChatPanel({
@@ -38,12 +48,56 @@ export function ChatPanel({
   onClose,
   title = 'OperAI Assistant',
   subtitle,
-  className = ''
+  className = '',
+  isMuted: propIsMuted,
+  onToggleMute: propOnToggleMute
 }: ChatPanelProps) {
+  const [internalMuted, setInternalMuted] = useState(false)
+  const isMuted = propIsMuted ?? internalMuted
+
   const lastSpokenTranscriptRef = useRef<string>('')
+
+  // Track message IDs known at mount time so historical messages are NEVER spoken
+  const initialMessageIdsRef = useRef<Set<string> | null>(null)
+  if (initialMessageIdsRef.current === null) {
+    initialMessageIdsRef.current = new Set(chatData.messages.map((m) => m.id))
+  }
+
+  // Track all processed message IDs across rerenders to prevent duplicate speech
+  const processedMessageIdsRef = useRef<Set<string>>(new Set())
 
   const transcript = voice?.transcript
   const { applyVoiceTranscript } = chatData
+
+  // Keep voiceRef synchronized with latest voice instance across renders to prevent stale closures
+  const voiceRef = useRef(voice)
+  useEffect(() => {
+    voiceRef.current = voice
+  })
+
+  // Stop speech synthesis when ChatPanel actually unmounts (never on voice reference changes)
+  useEffect(() => {
+    return () => {
+      if (voiceRef.current?.isSpeaking) {
+        voiceRef.current.stopSpeaking()
+      }
+    }
+  }, [])
+
+  // Process assistant speech playback when new messages arrive
+  useEffect(() => {
+    if (!voice?.speak) return
+
+    processAssistantSpeechPlayback({
+      messages: chatData.messages,
+      mode: chatData.mode,
+      isMuted,
+      isSynthesisSupported: voice.isSynthesisSupported,
+      initialMessageIds: initialMessageIdsRef.current ?? new Set(),
+      processedMessageIds: processedMessageIdsRef.current,
+      speak: voice.speak
+    })
+  }, [chatData.messages, chatData.mode, isMuted, voice])
 
   // Synchronize incoming speech recognition transcript to user draft buffer
   useEffect(() => {
@@ -62,8 +116,23 @@ export function ChatPanel({
     }
   }, [transcript])
 
+  const handleToggleMute = () => {
+    const nextMuted = !isMuted
+    if (nextMuted && voice?.isSpeaking) {
+      voice.stopSpeaking()
+    }
+    if (propOnToggleMute) {
+      propOnToggleMute()
+    } else {
+      setInternalMuted(nextMuted)
+    }
+  }
+
   const handleStartListening = () => {
     if (!voice) return
+    if (voice.isSpeaking) {
+      voice.stopSpeaking()
+    }
     voice.resetTranscript()
     voice.startListening()
   }
@@ -82,6 +151,9 @@ export function ChatPanel({
   }
 
   const handleToggleMode = () => {
+    if (voice?.isSpeaking) {
+      voice.stopSpeaking()
+    }
     const nextMode = chatData.mode === 'live' ? 'demo' : 'live'
     chatData.setMode(nextMode)
   }
@@ -89,6 +161,10 @@ export function ChatPanel({
   const handleClearConversation = () => {
     chatData.clearConversation()
     voice?.resetTranscript()
+    if (voice?.isSpeaking) {
+      voice.stopSpeaking()
+    }
+    initialMessageIdsRef.current = new Set()
   }
 
   const isDemo = chatData.mode === 'demo'
@@ -130,6 +206,49 @@ export function ChatPanel({
               aria-hidden="true"
             />
             <span>{isDemo ? 'Demo Mode' : 'Live'}</span>
+          </button>
+
+          {/* Audio Mute / Unmute Toggle */}
+          <button
+            type="button"
+            className={`chat-panel__icon-button ${isMuted ? 'chat-panel__icon-button--muted' : ''}`}
+            onClick={handleToggleMute}
+            title={isMuted ? 'Unmute assistant speech' : 'Mute assistant speech'}
+            aria-label={isMuted ? 'Unmute assistant speech' : 'Mute assistant speech'}
+            aria-pressed={isMuted}
+          >
+            {isMuted ? (
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                <line x1="23" y1="9" x2="17" y2="15" />
+                <line x1="17" y1="9" x2="23" y2="15" />
+              </svg>
+            ) : (
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+              </svg>
+            )}
           </button>
 
           {/* Clear / Reset Conversation */}

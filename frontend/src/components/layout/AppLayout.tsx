@@ -6,7 +6,7 @@
    Theme is received from App.tsx via props (single source).
    ============================================================ */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { NAV_ITEMS } from '../../types/navigation'
 import type { PageId } from '../../types/navigation'
 import type { Theme } from '../../hooks/useTheme'
@@ -34,11 +34,22 @@ export function AppLayout({ theme, toggleTheme }: AppLayoutProps) {
   const [currentPage, setCurrentPage] = useState<PageId>('overview')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isChatOpen, setIsChatOpen] = useState(false)
+  const [isMuted, setIsMuted] = useState(false)
   const chatButtonRef = useRef<HTMLButtonElement | null>(null)
 
   // Single-source chat and voice state held at layout root
   const chatData = useChatData()
   const voice = useVoice()
+
+  const handleToggleMute = useCallback(() => {
+    setIsMuted((prev) => {
+      const next = !prev
+      if (next && voice.isSpeaking) {
+        voice.stopSpeaking()
+      }
+      return next
+    })
+  }, [voice])
 
   /* Derive the active NavItem for the TopNav title */
   const activeItem =
@@ -145,6 +156,8 @@ export function AppLayout({ theme, toggleTheme }: AppLayoutProps) {
         chatData={chatData}
         voice={voice}
         triggerRef={chatButtonRef}
+        isMuted={isMuted}
+        onToggleMute={handleToggleMute}
       />
     </div>
   )
