@@ -541,3 +541,266 @@ def test_dish_swap_prep_dependency_moves_cook_and_undo_restores(client, db_sessi
     assert _utc(prep.end_at) == _utc(before["prep"][1])
     assert _utc(cook.start_at) == _utc(before["cook"][0])
     assert _utc(cook.end_at) == _utc(before["cook"][1])
+
+
+def test_approve_order_intake_success(client, db_session):
+    from app.services.kitchen import get_kitchen
+
+    kitchen = get_kitchen(db_session)
+    menu = db_session.scalars(select(MenuItem).where(MenuItem.kitchen_id == kitchen.id)).first()
+
+    # Create baseline existing task for 2026-10-17 so daily plan exists
+    target_dt = datetime(2026, 10, 17, 10, 0, tzinfo=timezone.utc)
+    _create_order_task(db_session, kitchen, menu, start=target_dt)
+
+    initial_version = kitchen.plan_version
+    deadline_iso = "2026-10-17T13:00:00+05:30"
+    payload = {
+        "customer_name": "Test Customer Intake",
+        "customer_phone": "9800000099",
+        "channel": "whatsapp",
+        "deadline": deadline_iso,
+        "total_amount": 360.0,
+        "confidence": 0.95,
+        "source_text": "2 paneer biryani please",
+        "items": [
+            {
+                "menu_item_id": str(menu.id),
+                "name": menu.name,
+                "quantity": 2,
+                "unit_price": 180.0,
+            }
+        ],
+    }
+    ingredients = db_session.scalars(select(Ingredient).where(Ingredient.kitchen_id == kitchen.id)).all()
+    fp = _fingerprint(ingredients)
+    action = ProposedAction(
+        id=uuid4(),
+        kitchen_id=kitchen.id,
+        group_id=uuid4(),
+        option_number=1,
+        action_type="order_intake",
+        title="Add order from Test Customer Intake",
+        payload=payload,
+        impact={"total_amount": 360.0, "items_count": 1},
+        status="pending",
+        base_plan_version=initial_version,
+        stock_fingerprint=fp,
+        created_at=datetime.now(timezone.utc),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+    )
+    db_session.add(action)
+    db_session.flush()
+
+    res = client.post(f"/api/actions/{action.id}/approve", json={"confirm_option_number": 1})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["action"]["status"] == "executed"
+    assert body["plan_version_before"] == initial_version
+    assert body["plan_version_after"] == initial_version + 1
+
+    # Verify order in DB
+    created_order = db_session.scalars(
+        select(Order).where(Order.customer_name == "Test Customer Intake")
+    ).first()
+    assert created_order is not None
+    assert created_order.status == "planned"
+    assert len(created_order.items) == 1
+    assert created_order.items[0].quantity == 2
+
+    # Verify tasks scheduled
+    tasks = db_session.scalars(
+        select(PlanTask).where(PlanTask.order_item_id == created_order.items[0].id)
+    ).all()
+    assert len(tasks) >= 1
+
+    # Verify audit log
+    audit_id = UUID(body["audit_id"])
+    audit = db_session.get(AuditLog, audit_id)
+    assert audit is not None
+    assert audit.event_type == "action_executed"
+    assert "orders" in audit.after_snapshot
+    assert "plan_tasks" in audit.after_snapshot
+
+
+def test_approve_order_intake_duplicate_rejected(client, db_session):
+    from app.services.kitchen import get_kitchen
+
+    kitchen = get_kitchen(db_session)
+    menu = db_session.scalars(select(MenuItem).where(MenuItem.kitchen_id == kitchen.id)).first()
+    target_dt = datetime(2026, 10, 17, 10, 0, tzinfo=timezone.utc)
+    _create_order_task(db_session, kitchen, menu, start=target_dt)
+
+    payload = {
+        "customer_name": "Dup Customer",
+        "deadline": "2026-10-17T13:00:00+05:30",
+        "total_amount": 180.0,
+        "items": [{"menu_item_id": str(menu.id), "name": menu.name, "quantity": 1, "unit_price": 180.0}],
+    }
+    ingredients = db_session.scalars(select(Ingredient).where(Ingredient.kitchen_id == kitchen.id)).all()
+    action = ProposedAction(
+        id=uuid4(),
+        kitchen_id=kitchen.id,
+        group_id=uuid4(),
+        option_number=1,
+        action_type="order_intake",
+        title="Dup order",
+        payload=payload,
+        impact={},
+        status="pending",
+        base_plan_version=kitchen.plan_version,
+        stock_fingerprint=_fingerprint(ingredients),
+        created_at=datetime.now(timezone.utc),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+    )
+    db_session.add(action)
+    db_session.flush()
+
+    r1 = client.post(f"/api/actions/{action.id}/approve", json={"confirm_option_number": 1})
+    assert r1.status_code == 200
+
+    r2 = client.post(f"/api/actions/{action.id}/approve", json={"confirm_option_number": 1})
+    assert r2.status_code == 409
+    assert r2.json()["error"]["code"] == "ACTION_NOT_PENDING"
+
+
+def test_approve_order_intake_preserves_locked_tasks(client, db_session):
+    from app.services.kitchen import get_kitchen
+
+    kitchen = get_kitchen(db_session)
+    menu = db_session.scalars(select(MenuItem).where(MenuItem.kitchen_id == kitchen.id)).first()
+
+    target_dt = datetime(2026, 10, 17, 9, 30, tzinfo=timezone.utc)
+    _, _, locked_task = _create_order_task(
+        db_session, kitchen, menu, start=target_dt, burner=1, cook_no=1, locked=True
+    )
+    locked_start = locked_task.start_at
+    locked_end = locked_task.end_at
+
+    payload = {
+        "customer_name": "Intake With Locked",
+        "deadline": "2026-10-17T13:00:00+05:30",
+        "total_amount": 180.0,
+        "items": [{"menu_item_id": str(menu.id), "name": menu.name, "quantity": 1, "unit_price": 180.0}],
+    }
+    ingredients = db_session.scalars(select(Ingredient).where(Ingredient.kitchen_id == kitchen.id)).all()
+    action = ProposedAction(
+        id=uuid4(),
+        kitchen_id=kitchen.id,
+        group_id=uuid4(),
+        option_number=1,
+        action_type="order_intake",
+        title="Intake with locked",
+        payload=payload,
+        impact={},
+        status="pending",
+        base_plan_version=kitchen.plan_version,
+        stock_fingerprint=_fingerprint(ingredients),
+        created_at=datetime.now(timezone.utc),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+    )
+    db_session.add(action)
+    db_session.flush()
+
+    res = client.post(f"/api/actions/{action.id}/approve", json={"confirm_option_number": 1})
+    assert res.status_code == 200
+
+    db_session.refresh(locked_task)
+    assert _utc(locked_task.start_at) == _utc(locked_start)
+    assert _utc(locked_task.end_at) == _utc(locked_end)
+    assert locked_task.locked is True
+
+
+def test_approve_order_intake_no_plan_returns_404(client, db_session):
+    from app.services.kitchen import get_kitchen
+
+    kitchen = get_kitchen(db_session)
+    menu = db_session.scalars(select(MenuItem).where(MenuItem.kitchen_id == kitchen.id)).first()
+
+    # Target date 2026-11-20 has no existing plan
+    payload = {
+        "customer_name": "No Plan Date Customer",
+        "deadline": "2026-11-20T13:00:00+05:30",
+        "total_amount": 180.0,
+        "items": [{"menu_item_id": str(menu.id), "name": menu.name, "quantity": 1, "unit_price": 180.0}],
+    }
+    ingredients = db_session.scalars(select(Ingredient).where(Ingredient.kitchen_id == kitchen.id)).all()
+    action = ProposedAction(
+        id=uuid4(),
+        kitchen_id=kitchen.id,
+        group_id=uuid4(),
+        option_number=1,
+        action_type="order_intake",
+        title="No plan order",
+        payload=payload,
+        impact={},
+        status="pending",
+        base_plan_version=kitchen.plan_version,
+        stock_fingerprint=_fingerprint(ingredients),
+        created_at=datetime.now(timezone.utc),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+    )
+    db_session.add(action)
+    db_session.flush()
+
+    res = client.post(f"/api/actions/{action.id}/approve", json={"confirm_option_number": 1})
+    assert res.status_code == 404
+    assert res.json()["error"]["code"] == "PLAN_NOT_FOUND"
+
+
+def test_undo_order_intake(client, db_session):
+    from app.services.kitchen import get_kitchen
+
+    kitchen = get_kitchen(db_session)
+    menu = db_session.scalars(select(MenuItem).where(MenuItem.kitchen_id == kitchen.id)).first()
+    target_dt = datetime(2026, 10, 17, 10, 0, tzinfo=timezone.utc)
+    _create_order_task(db_session, kitchen, menu, start=target_dt)
+
+    payload = {
+        "customer_name": "Customer To Undo",
+        "deadline": "2026-10-17T13:00:00+05:30",
+        "total_amount": 180.0,
+        "items": [{"menu_item_id": str(menu.id), "name": menu.name, "quantity": 1, "unit_price": 180.0}],
+    }
+    ingredients = db_session.scalars(select(Ingredient).where(Ingredient.kitchen_id == kitchen.id)).all()
+    action = ProposedAction(
+        id=uuid4(),
+        kitchen_id=kitchen.id,
+        group_id=uuid4(),
+        option_number=1,
+        action_type="order_intake",
+        title="Customer To Undo",
+        payload=payload,
+        impact={},
+        status="pending",
+        base_plan_version=kitchen.plan_version,
+        stock_fingerprint=_fingerprint(ingredients),
+        created_at=datetime.now(timezone.utc),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+    )
+    db_session.add(action)
+    db_session.flush()
+
+    res = client.post(f"/api/actions/{action.id}/approve", json={"confirm_option_number": 1})
+    assert res.status_code == 200
+    audit_id = res.json()["audit_id"]
+
+    created_order = db_session.scalars(
+        select(Order).where(Order.customer_name == "Customer To Undo")
+    ).first()
+    assert created_order is not None
+    order_id = created_order.id
+
+    # Post undo
+    undo_res = client.post(f"/api/audit/{audit_id}/undo")
+    assert undo_res.status_code == 201
+    undo_action_id = undo_res.json()["action"]["id"]
+
+    # Approve undo
+    approve_undo = client.post(f"/api/actions/{undo_action_id}/approve", json={"confirm_option_number": 1})
+    assert approve_undo.status_code == 200
+
+    # Verify order is deleted
+    db_session.expire_all()
+    deleted_order = db_session.get(Order, order_id)
+    assert deleted_order is None
