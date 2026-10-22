@@ -116,6 +116,50 @@ class OrderOut(BaseModel):
     items: list[OrderItemOut]
 
 
+class OrderExtractRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=2000)
+
+
+class OrderDraftItemOut(BaseModel):
+    menu_item_id: UUID
+    name: str
+    quantity: int
+    unit_price: Money
+
+
+class OrderDraftOut(BaseModel):
+    customer_name: str
+    customer_phone: str | None = None
+    channel: str = "whatsapp"
+    deadline: IsoDateTime
+    items: list[OrderDraftItemOut]
+    total_amount: Money
+
+
+class OrderExtractActionOut(BaseModel):
+    id: UUID
+    group_id: UUID
+    option_number: int
+    action_type: str = "order_intake"
+    title: str
+    status: str = "pending"
+    expires_at: IsoDateTime
+
+
+class OrderExtractSuccessResponse(BaseModel):
+    draft: OrderDraftOut
+    confidence: float
+    warnings: list[str] = Field(default_factory=list)
+    action: OrderExtractActionOut
+
+
+class OrderExtractAmbiguousResponse(BaseModel):
+    draft: None = None
+    confidence: float
+    clarifying_questions: list[str]
+    action: None = None
+
+
 class OrderListResponse(BaseModel):
     data: list[OrderOut]
     count: int
@@ -326,6 +370,18 @@ class AuditEntryOut(BaseModel):
 class AuditListResponse(BaseModel):
     data: list[AuditEntryOut]
     count: int
+
+
+class DaySummaryResponse(BaseModel):
+    date: str
+    orders_total: int
+    orders_completed: int
+    actions_executed: int
+    actions_undone: int
+    orders_protected: int
+    revenue_protected: Money
+    net_extra_cost: Money
+    data_source: str
 
 
 class UndoActionOut(BaseModel):

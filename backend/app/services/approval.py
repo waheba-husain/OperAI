@@ -2,7 +2,10 @@ import re
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
-from uuid import UUID
+from uuid import UUID, uuid4
+
+from app.services.scheduler import book_interval, ensure_ist, find_earliest_slot
+from app.timeutil import IST, day_bounds
 
 from sqlalchemy import DateTime, Numeric, Uuid, select
 from sqlalchemy.orm import Session
@@ -171,7 +174,8 @@ def _apply_substitute(
 def _wa_url(phone: str | None, message: str) -> str:
     encoded = urllib.parse.quote(message)
     if phone:
-        return f"https://wa.me/{re.sub(r'[^\d]', '', phone)}?text={encoded}"
+        clean_phone = re.sub(r"[^\d]", "", phone)
+        return f"https://wa.me/{clean_phone}?text={encoded}"
     return f"https://wa.me/?text={encoded}"
 
 
@@ -743,11 +747,225 @@ def _apply_undo(
     )
 
 
+def _apply_order_intake(
+    db: Session,
+    *,
+    kitchen: Kitchen,
+    action: ProposedAction,
+    now: datetime,
+    transcript: str | None = None,
+) -> tuple[ActionChangesOut, list[CustomerMessageOut], dict, dict, str]:
+    payload = action.payload or {}
+    customer_name = payload.get("customer_name") or "Customer"
+    customer_phone = payload.get("customer_phone")
+    channel = payload.get("channel", "whatsapp")
+    deadline_raw = payload.get("deadline")
+    if not deadline_raw:
+        raise AppError(422, "VALIDATION_ERROR", "Order deadline is required in payload")
+    deadline = datetime.fromisoformat(str(deadline_raw))
+    if deadline.tzinfo is None:
+        deadline = deadline.replace(tzinfo=IST)
+    else:
+        deadline = deadline.astimezone(IST)
+
+    total_amount = Decimal(str(payload.get("total_amount", "0.00")))
+    source_text = payload.get("source_text")
+    confidence = Decimal(str(payload.get("confidence", "1.00")))
+
+    target_date = deadline.date()
+    start_bound, end_bound = day_bounds(target_date)
+
+    # Require an existing daily plan on the target date
+    existing_tasks = db.scalars(
+        select(PlanTask).where(
+            PlanTask.kitchen_id == kitchen.id,
+            PlanTask.start_at >= start_bound,
+            PlanTask.start_at < end_bound,
+            PlanTask.status != "cancelled",
+        ).with_for_update()
+    ).all()
+
+    if not existing_tasks:
+        raise AppError(
+            404,
+            "PLAN_NOT_FOUND",
+            f"No plan exists for date {target_date.isoformat()}; call /api/plan/generate first",
+            {"date": target_date.isoformat()},
+        )
+
+    # 1. Insert Order
+    order = Order(
+        id=uuid4(),
+        kitchen_id=kitchen.id,
+        customer_name=customer_name,
+        customer_phone=customer_phone,
+        channel=channel,
+        deadline=deadline,
+        status="planned",
+        total_amount=total_amount,
+        source_text=source_text,
+        extraction_confidence=confidence,
+        data_source="simulated",
+        created_at=now,
+    )
+    db.add(order)
+    db.flush()
+
+    # 2. Insert OrderItems
+    order_items: list[OrderItem] = []
+    for it_data in payload.get("items", []):
+        oi = OrderItem(
+            id=uuid4(),
+            order_id=order.id,
+            menu_item_id=UUID(str(it_data["menu_item_id"])),
+            quantity=int(it_data["quantity"]),
+            unit_price=Decimal(str(it_data["unit_price"])),
+            swapped_from_item_id=None,
+        )
+        db.add(oi)
+        order_items.append(oi)
+    db.flush()
+
+    # 3. Schedule ONLY new tasks into existing timeline (locked tasks never move)
+    day_start = datetime(target_date.year, target_date.month, target_date.day, 9, 0, tzinfo=IST)
+    cook_intervals: dict[int, list[tuple[datetime, datetime]]] = {
+        c: [] for c in range(1, kitchen.cook_count + 1)
+    }
+    burner_intervals: dict[int, list[tuple[datetime, datetime]]] = {
+        b: [] for b in range(1, kitchen.burner_count + 1)
+    }
+
+    # Book all existing tasks as occupied intervals
+    for t in existing_tasks:
+        s_at = ensure_ist(t.start_at)
+        e_at = ensure_ist(t.end_at)
+        if t.task_type == "prep":
+            if 1 <= t.cook_no <= kitchen.cook_count:
+                book_interval(cook_intervals[t.cook_no], s_at, e_at)
+        elif t.task_type == "cook":
+            if t.burner_no is not None and 1 <= t.burner_no <= kitchen.burner_count:
+                book_interval(burner_intervals[t.burner_no], s_at, e_at)
+
+    new_tasks: list[PlanTask] = []
+    task_version = kitchen.plan_version + 1
+    max_end_time = day_start
+
+    for oi in order_items:
+        menu = db.scalar(
+            select(MenuItem).where(MenuItem.id == oi.menu_item_id, MenuItem.kitchen_id == kitchen.id)
+        )
+        if menu is None:
+            continue
+        prep_min = menu.prep_minutes
+        cook_min = menu.cook_minutes
+
+        prep_end = day_start
+        prep_cook = 1
+
+        if prep_min > 0:
+            best_cook = 1
+            best_prep_start = None
+            for c in range(1, kitchen.cook_count + 1):
+                slot_start = find_earliest_slot(cook_intervals[c], day_start, prep_min)
+                if (
+                    best_prep_start is None
+                    or slot_start < best_prep_start
+                    or (slot_start == best_prep_start and c < best_cook)
+                ):
+                    best_prep_start = slot_start
+                    best_cook = c
+            p_start = best_prep_start if best_prep_start is not None else day_start
+            p_end = p_start + timedelta(minutes=prep_min)
+            book_interval(cook_intervals[best_cook], p_start, p_end)
+            prep_end = p_end
+            prep_cook = best_cook
+
+            p_task = PlanTask(
+                id=uuid4(),
+                kitchen_id=kitchen.id,
+                order_item_id=oi.id,
+                task_type="prep",
+                burner_no=None,
+                cook_no=best_cook,
+                start_at=p_start,
+                end_at=p_end,
+                status="scheduled",
+                locked=False,
+                plan_version=task_version,
+            )
+            new_tasks.append(p_task)
+            if p_end > max_end_time:
+                max_end_time = p_end
+
+        if cook_min > 0:
+            earliest_cook = max(day_start, prep_end)
+            best_burner = 1
+            best_cook_start = None
+            for b in range(1, kitchen.burner_count + 1):
+                slot_start = find_earliest_slot(burner_intervals[b], earliest_cook, cook_min)
+                if (
+                    best_cook_start is None
+                    or slot_start < best_cook_start
+                    or (slot_start == best_cook_start and b < best_burner)
+                ):
+                    best_cook_start = slot_start
+                    best_burner = b
+            c_start = best_cook_start if best_cook_start is not None else earliest_cook
+            c_end = c_start + timedelta(minutes=cook_min)
+            book_interval(burner_intervals[best_burner], c_start, c_end)
+
+            c_task = PlanTask(
+                id=uuid4(),
+                kitchen_id=kitchen.id,
+                order_item_id=oi.id,
+                task_type="cook",
+                burner_no=best_burner,
+                cook_no=prep_cook,
+                start_at=c_start,
+                end_at=c_end,
+                status="scheduled",
+                locked=False,
+                plan_version=task_version,
+            )
+            new_tasks.append(c_task)
+            if c_end > max_end_time:
+                max_end_time = c_end
+
+    db.add_all(new_tasks)
+
+    # Check deadline
+    if max_end_time > ensure_ist(order.deadline):
+        order.status = "delayed"
+
+    before_snapshot: dict = {
+        "orders": [],
+        "order_items": [],
+        "plan_tasks": [],
+    }
+    after_snapshot = {
+        "orders": [_snapshot_row(order)],
+        "order_items": [_snapshot_row(it) for it in order_items],
+        "plan_tasks": [_snapshot_row(pt) for pt in new_tasks],
+    }
+    audit_summary = (
+        f"Approved order intake for {order.customer_name} ({len(order_items)} items); "
+        f"scheduled {len(new_tasks)} tasks"
+    )
+    changes = ActionChangesOut(
+        orders_affected=[str(order.id)],
+        tasks_rescheduled=len(new_tasks),
+        summary=audit_summary,
+    )
+    return changes, [], before_snapshot, after_snapshot, audit_summary
+
+
 APPLIERS = {
     ("recovery", "substitute"): _apply_substitute,
     ("recovery", "dish_swap"): _apply_dish_swap,
     ("recovery", "emergency_purchase"): _apply_emergency_purchase,
     ("undo", None): _apply_undo,
+    ("order_intake", None): _apply_order_intake,
+    ("order_intake", "order_intake"): _apply_order_intake,
 }
 
 

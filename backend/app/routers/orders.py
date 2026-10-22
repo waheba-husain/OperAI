@@ -1,13 +1,18 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
 from app.deps import require_api_key
-from app.schemas import OrderListResponse
-from app.services.orders import list_orders
+from app.schemas import (
+    OrderExtractAmbiguousResponse,
+    OrderExtractRequest,
+    OrderExtractSuccessResponse,
+    OrderListResponse,
+)
+from app.services.orders import extract_order, list_orders
 
 router = APIRouter(tags=["orders"], dependencies=[Depends(require_api_key)])
 
@@ -25,5 +30,23 @@ def get_orders(
         status=status,
         limit=limit if limit is not None else settings.list_default_limit,
     )
+    db.commit()
+    return result
+
+
+@router.post(
+    "/api/orders/extract",
+    response_model=OrderExtractSuccessResponse | OrderExtractAmbiguousResponse,
+    status_code=201,
+)
+def post_extract_order(
+    payload: OrderExtractRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> OrderExtractSuccessResponse | OrderExtractAmbiguousResponse:
+    result = extract_order(db, payload.text)
+    if isinstance(result, OrderExtractAmbiguousResponse):
+        response.status_code = 200
+        return result
     db.commit()
     return result
