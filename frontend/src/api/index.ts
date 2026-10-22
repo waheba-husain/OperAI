@@ -16,6 +16,7 @@ export {
   approveAction,
   chatAgent,
   completeOrder,
+  extractOrder,
   completePlanTask,
   generatePlan,
   getActions,

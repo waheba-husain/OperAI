@@ -463,6 +463,72 @@ class BedrockClient:
         )
         return result.text
 
+    def generate_groq_text(self, prompt: str, system_prompt: str | None = None) -> str:
+        """Generate text through Groq for Feature 8 without changing chat routing."""
+        if not settings.groq_api_key:
+            raise BedrockUnavailableError(
+                "Order extraction is not configured. Set GROQ_API_KEY in backend/.env."
+            )
+        if not prompt or not prompt.strip():
+            raise ValueError("prompt cannot be empty or whitespace only")
+
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        payload = {
+            "model": settings.groq_model_id,
+            "messages": messages,
+            "temperature": 0,
+            "response_format": {"type": "json_object"},
+        }
+        headers = {
+            "Authorization": f"Bearer {settings.groq_api_key}",
+            "Content-Type": "application/json",
+        }
+
+        try:
+            with httpx.Client(timeout=30.0) as http_client:
+                response = http_client.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers=headers,
+                    json=payload,
+                )
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            logger.error("Groq extraction connection failed (%s)", type(exc).__name__)
+            raise BedrockUnavailableError(
+                "Groq order extraction is unreachable. Check the connection and try again."
+            ) from exc
+        except Exception as exc:
+            logger.error("Unexpected Groq extraction error (%s)", type(exc).__name__)
+            raise BedrockUnavailableError("Groq order extraction failed unexpectedly.") from exc
+
+        if response.status_code != 200:
+            if response.status_code in (401, 403):
+                message = "Groq authentication failed. Check GROQ_API_KEY in backend/.env."
+            elif response.status_code == 400:
+                message = "Groq rejected the configured model. Check GROQ_MODEL_ID in backend/.env."
+            elif response.status_code == 429:
+                message = "Groq order extraction is rate limited. Try again later."
+            else:
+                message = f"Groq order extraction failed with HTTP {response.status_code}."
+            logger.error("Groq extraction returned HTTP %s", response.status_code)
+            raise BedrockUnavailableError(message)
+
+        try:
+            response_body = response.json()
+        except (ValueError, TypeError) as exc:
+            raise BedrockResponseError("Groq returned an invalid response.") from exc
+
+        choices = response_body.get("choices") if isinstance(response_body, dict) else None
+        if not isinstance(choices, list) or not choices:
+            raise BedrockResponseError("Groq returned an invalid response without a completion.")
+        message = choices[0].get("message") if isinstance(choices[0], dict) else None
+        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(content, str) or not content.strip():
+            raise BedrockResponseError("Groq returned an empty extraction response.")
+        return content
+
 
 _client_instance: BedrockClient | None = None
 

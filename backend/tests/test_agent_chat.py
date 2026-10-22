@@ -614,8 +614,19 @@ class TestAgentChatSecurityAndGuardrails:
         finally:
             app.dependency_overrides.pop(get_bedrock_client, None)
 
-    def test_extract_order_tool_rejected_as_disallowed_in_stage_4(self, client):
-        # extract_order is omitted until Feature 8
+    def test_extract_order_tool_creates_pending_proposal_without_approval(self, client, db_session, monkeypatch):
+        from app.ai.extractor import RawExtractedItem, RawExtractedOrder
+        from app.models import ProposedAction
+
+        monkeypatch.setattr(
+            "app.services.orders.extract_order_from_text",
+            lambda _text: RawExtractedOrder(
+                customer_name="Customer D",
+                deadline="2026-10-17T13:00:00+05:30",
+                items=[RawExtractedItem(dish="Paneer Biryani", quantity=2)],
+                confidence=0.9,
+            ),
+        )
         tool_call = _make_converse_result(
             text="",
             content=[
@@ -623,7 +634,7 @@ class TestAgentChatSecurityAndGuardrails:
                     "toolUse": {
                         "toolUseId": "tool_extract_01",
                         "name": "extract_order",
-                        "input": {"text": "2 biryani"},
+                        "input": {"text": "2 Paneer Biryani for tomorrow at 1pm, Customer D"},
                     }
                 }
             ],
@@ -631,18 +642,22 @@ class TestAgentChatSecurityAndGuardrails:
         )
 
         mock_bedrock = MagicMock(spec=BedrockClient)
-        mock_bedrock.converse.return_value = tool_call
+        mock_bedrock.converse.side_effect = [tool_call, _make_converse_result("I prepared a pending order proposal.")]
 
         app.dependency_overrides[get_bedrock_client] = lambda: mock_bedrock
         try:
             response = client.post(
                 "/api/agent/chat",
-                json={"message": "Customer ordered 2 biryani"},
+                json={"message": "Customer ordered 2 Paneer Biryani for tomorrow at 1pm, Customer D"},
             )
             assert response.status_code == 200
             data = response.json()
-            assert data["intent"] == "unknown"
-            assert data["tool_used"] is None
+            assert data["intent"] == "extract_order"
+            assert data["tool_used"] == "extract_order"
+            assert data["requires_confirmation"] is True
+            assert data["confirm_phrases"] == ["confirm option 1"]
+            assert data["data"]["action"]["status"] == "pending"
+            assert db_session.query(ProposedAction).filter_by(action_type="order_intake").count() == 1
         finally:
             app.dependency_overrides.pop(get_bedrock_client, None)
 

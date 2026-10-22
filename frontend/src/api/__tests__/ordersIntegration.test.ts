@@ -32,7 +32,7 @@ import assert from 'node:assert/strict'
 
 import { ApiClient } from '../client.ts'
 import { ApiError, ConfigurationError } from '../errors.ts'
-import { getOrders } from '../endpoints.ts'
+import { extractOrder, getOrders } from '../endpoints.ts'
 import {
   adaptOrderToViewModel,
   adaptOrdersToViewModels,
@@ -45,7 +45,87 @@ import {
 } from '../adapters/orderAdapter.ts'
 import { DEMO_ORDERS, DEMO_ORDERS_METADATA } from '../../pages/orders/ordersData.ts'
 
-import type { OrderDTO, OrderListResponseDTO, OrderStatusDTO, OrderChannelDTO } from '../../types/dto.ts'
+import type {
+  OrderDTO,
+  OrderExtractResponseDTO,
+  OrderListResponseDTO,
+  OrderStatusDTO,
+  OrderChannelDTO
+} from '../../types/dto.ts'
+
+test('POST /api/orders/extract: sends the original customer text and returns a pending proposal', async () => {
+  const expected: OrderExtractResponseDTO = {
+    draft: {
+      customer_name: 'Customer D',
+      customer_phone: '9800000010',
+      channel: 'whatsapp',
+      deadline: '2026-10-17T13:00:00+05:30',
+      items: [{ menu_item_id: 'menu-1', name: 'Paneer Biryani', quantity: 2, unit_price: 180 }],
+      total_amount: 360
+    },
+    confidence: 0.93,
+    warnings: [],
+    action: {
+      id: 'action-1',
+      group_id: 'group-1',
+      option_number: 1,
+      action_type: 'order_intake',
+      title: 'Add order from Customer D (2 x Paneer Biryani)',
+      status: 'pending',
+      expires_at: '2026-10-16T21:30:00+05:30'
+    }
+  }
+  let requestUrl = ''
+  let requestBody = ''
+  const client = new ApiClient({
+    baseUrl: 'http://localhost:8000',
+    apiKey: 'test-key',
+    fetchFn: async (input, init) => {
+      requestUrl = String(input)
+      requestBody = String(init?.body)
+      return new Response(JSON.stringify(expected), { status: 201 })
+    }
+  })
+
+  const result = await extractOrder(
+    { text: '2 Paneer Biryani for tomorrow at 1pm, Customer D' },
+    { client }
+  )
+  assert.equal(requestUrl, 'http://localhost:8000/api/orders/extract')
+  assert.deepEqual(JSON.parse(requestBody), { text: '2 Paneer Biryani for tomorrow at 1pm, Customer D' })
+  assert.equal(result.draft?.items[0].quantity, 2)
+  assert.equal(result.action?.status, 'pending')
+})
+
+test('POST /api/orders/extract: preserves clarification response and backend errors', async () => {
+  const ambiguous: OrderExtractResponseDTO = {
+    draft: null,
+    confidence: 0.4,
+    clarifying_questions: ['Which active menu item did the customer mean?'],
+    action: null
+  }
+  const client = new ApiClient({
+    baseUrl: 'http://localhost:8000',
+    apiKey: 'test-key',
+    fetchFn: async () => new Response(JSON.stringify(ambiguous), { status: 200 })
+  })
+  const result = await extractOrder({ text: '2 paneer please' }, { client })
+  assert.equal(result.draft, null)
+  assert.deepEqual(result.clarifying_questions, ['Which active menu item did the customer mean?'])
+  assert.equal(result.action, null)
+
+  const unavailable = new ApiClient({
+    baseUrl: 'http://localhost:8000',
+    apiKey: 'test-key',
+    fetchFn: async () => new Response(JSON.stringify({
+      error: { code: 'AI_UNAVAILABLE', message: 'Order extraction is unavailable.', details: null }
+    }), { status: 502 })
+  })
+  await assert.rejects(
+    extractOrder({ text: '2 Paneer Biryani' }, { client: unavailable }),
+    (error: unknown) => error instanceof ApiError && error.status === 502 && error.code === 'AI_UNAVAILABLE'
+  )
+})
 
 /* ── 1. OrderDTO to OrderViewModel Adapter Mapping ───────────── */
 

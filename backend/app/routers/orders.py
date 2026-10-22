@@ -46,11 +46,14 @@ def post_extract_order(
     response: Response,
     db: Session = Depends(get_db),
 ) -> OrderExtractSuccessResponse | OrderExtractAmbiguousResponse:
-    result = extract_order(db, payload.text)
+    result, created = extract_order(db, payload.text)
     if isinstance(result, OrderExtractAmbiguousResponse):
         response.status_code = 200
         return result
-    db.commit()
+    if created:
+        db.commit()
+    else:
+        response.status_code = 200
     return result
 
 

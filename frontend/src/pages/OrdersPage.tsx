@@ -9,13 +9,13 @@
    - AGENTS.md (Rule 1: Numbers from code; Rule 9: Honest data labels)
    ============================================================ */
 
-import { useState } from 'react'
 import type { PageId } from '../types/navigation.ts'
 import { useOrdersData, type UseOrdersDataOptions } from '../hooks/useOrdersData.ts'
 import { OrdersSummaryCards } from '../components/orders/OrdersSummaryCards.tsx'
 import { OrdersFilterToolbar } from '../components/orders/OrdersFilterToolbar.tsx'
 import { OrdersTable } from '../components/orders/OrdersTable.tsx'
 import { OrderDetailModal } from '../components/orders/OrderDetailModal.tsx'
+import { OrderIntakePanel } from '../components/orders/OrderIntakePanel.tsx'
 import { NavIcon } from '../components/icons/NavIcon.tsx'
 import './OrdersPage.css'
 
@@ -64,8 +64,6 @@ export function OrdersPage({ dataOptions }: OrdersPageProps) {
     refetch,
     setMode
   } = useOrdersData(dataOptions)
-
-  const [showPasteNotice, setShowPasteNotice] = useState(false)
 
   const isFiltered =
     searchQuery.trim().length > 0 || statusFilter !== 'all' || channelFilter !== 'all'
@@ -179,41 +177,8 @@ export function OrdersPage({ dataOptions }: OrdersPageProps) {
       )}
 
       {/* ── 4. WhatsApp Order Intake Helper / Status Callout ────────── */}
-      <div className="orders-intake-banner">
-        <div className="orders-intake-banner__left">
-          <span className="orders-intake-icon" aria-hidden="true">
-            💬
-          </span>
-          <div>
-            <strong className="orders-intake-title">
-              WhatsApp Order Intake & Paste-to-Extract
-            </strong>
-            <p className="orders-intake-desc">
-              Customer messages can be pasted to extract structured orders using Bedrock AI (Feature 8). Backend extraction endpoint (<code>POST /api/orders/extract</code>) is pending server implementation. Existing orders from all channels are listed below.
-            </p>
-          </div>
-        </div>
-        <button
-          type="button"
-          className="orders-intake-btn"
-          onClick={() => setShowPasteNotice(!showPasteNotice)}
-        >
-          {showPasteNotice ? 'Hide Info' : 'Intake Details'}
-        </button>
-      </div>
+      <OrderIntakePanel isLive={isLive} onOrderApproved={refetch} />
 
-      {showPasteNotice && (
-        <aside className="orders-paste-info-box" aria-label="WhatsApp intake details">
-          <h4>How Order Intake Works:</h4>
-          <ol>
-            <li>Customer orders arriving via WhatsApp, Instagram, or direct call can be pasted as raw text.</li>
-            <li>Bedrock AI extracts the dish names, portions, delivery deadline, and customer phone into a structured draft.</li>
-            <li>The kitchen owner verifies and confirms the order with an explicit option number before it is added to the live schedule.</li>
-          </ol>
-        </aside>
-      )}
-
-      {/* ── 5. Summary Metrics Ribbon ──────────────────────────────── */}
       <OrdersSummaryCards
         summary={summary}
         isLoading={isLoading}

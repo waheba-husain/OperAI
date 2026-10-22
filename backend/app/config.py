@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     aws_region: str = DEFAULT_AWS_REGION
     gemini_api_key: str = ""
     gemini_model_id: str = "gemini-3.5-flash"
+    groq_api_key: str = ""
+    groq_model_id: str = "openai/gpt-oss-120b"
 
     @field_validator("bedrock_model_id", mode="before")
     @classmethod
@@ -59,6 +61,14 @@ class Settings(BaseSettings):
     @property
     def GEMINI_MODEL_ID(self) -> str:
         return self.gemini_model_id
+
+    @property
+    def GROQ_API_KEY(self) -> str:
+        return self.groq_api_key
+
+    @property
+    def GROQ_MODEL_ID(self) -> str:
+        return self.groq_model_id
 
 
 settings = Settings()
