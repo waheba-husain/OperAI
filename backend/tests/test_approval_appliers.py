@@ -3,7 +3,7 @@ from decimal import Decimal
 from uuid import uuid4, UUID
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.models import AuditLog, Ingredient, Kitchen, MenuItem, Order, OrderItem, PlanTask, ProposedAction
 from app.services.recovery import _fingerprint
@@ -541,6 +541,146 @@ def test_dish_swap_prep_dependency_moves_cook_and_undo_restores(client, db_sessi
     assert _utc(prep.end_at) == _utc(before["prep"][1])
     assert _utc(cook.start_at) == _utc(before["cook"][0])
     assert _utc(cook.end_at) == _utc(before["cook"][1])
+
+
+def test_price_change_approval_audit_and_undo(client, db_session):
+    kitchen = db_session.scalar(select(Kitchen).limit(1))
+    menu = db_session.scalar(
+        select(MenuItem).where(MenuItem.kitchen_id == kitchen.id, MenuItem.name == "Paneer Biryani")
+    )
+    now = datetime.now(timezone.utc)
+    order = Order(
+        id=uuid4(), kitchen_id=kitchen.id, customer_name="Price Snapshot Customer",
+        customer_phone="919800000012", channel="direct", deadline=now + timedelta(hours=2),
+        status="planned", total_amount=Decimal("360.00"), data_source="simulated", created_at=now,
+    )
+    db_session.add(order)
+    db_session.flush()
+    order_item = OrderItem(
+        id=uuid4(), order_id=order.id, menu_item_id=menu.id, quantity=2,
+        unit_price=Decimal("180.00"), swapped_from_item_id=None,
+    )
+    db_session.add(order_item)
+    db_session.flush()
+    old_price = menu.price
+    prior_total = order.total_amount
+    prior_unit_price = order_item.unit_price
+    plan_version = kitchen.plan_version
+
+    proposal = client.post("/api/pricing/analyze", json={
+        "menu_item_id": str(menu.id), "price": 150, "propose_change": True,
+    })
+    assert proposal.status_code == 201
+    action_id = UUID(proposal.json()["action"]["id"])
+    action = db_session.get(ProposedAction, action_id)
+    before_row = {
+        column.name: str(getattr(menu, column.name)) if isinstance(getattr(menu, column.name), Decimal)
+        else str(getattr(menu, column.name)) if isinstance(getattr(menu, column.name), UUID)
+        else getattr(menu, column.name)
+        for column in MenuItem.__table__.columns
+    }
+    approved = client.post(f"/api/actions/{action_id}/approve", json={"confirm_option_number": 1})
+    assert approved.status_code == 200
+    db_session.refresh(menu)
+    db_session.refresh(order)
+    db_session.refresh(order_item)
+    db_session.refresh(kitchen)
+    assert menu.price == Decimal("205.00")
+    assert order_item.unit_price == prior_unit_price
+    assert order.total_amount == prior_total
+    assert kitchen.plan_version == plan_version
+    assert approved.json()["plan_version_before"] == plan_version
+    assert approved.json()["plan_version_after"] == plan_version
+    assert db_session.get(ProposedAction, action_id).status == "executed"
+    audit = db_session.get(AuditLog, UUID(approved.json()["audit_id"]))
+    assert audit.event_type == "action_executed"
+    assert audit.plan_version_before == plan_version
+    assert audit.plan_version_after == plan_version
+    assert audit.summary == "Changed Paneer Biryani price from ₹180.00 to ₹205.00"
+    assert set(audit.before_snapshot) == {"menu_items"}
+    assert set(audit.after_snapshot) == {"menu_items"}
+    assert set(audit.before_snapshot["menu_items"][0]) == {column.name for column in MenuItem.__table__.columns}
+    assert audit.before_snapshot["menu_items"][0] == before_row
+    assert audit.after_snapshot["menu_items"][0]["id"] == str(menu.id)
+    assert audit.after_snapshot["menu_items"][0]["price"] == "205.00"
+    assert audit.after_snapshot["menu_items"][0].keys() == audit.before_snapshot["menu_items"][0].keys()
+
+    listed = client.get("/api/audit?event_type=action_executed")
+    assert listed.status_code == 200
+    assert next(row for row in listed.json()["data"] if row["id"] == str(audit.id))["undoable"] is True
+    repeated = client.post(f"/api/actions/{action_id}/approve", json={"confirm_option_number": 1})
+    assert repeated.status_code == 409
+    assert repeated.json()["error"]["code"] == "ACTION_NOT_PENDING"
+
+    undo_proposal = client.post(f"/api/audit/{audit.id}/undo")
+    assert undo_proposal.status_code == 201
+    assert menu.price == Decimal("205.00")
+    undone = client.post(
+        f"/api/actions/{undo_proposal.json()['action']['id']}/approve",
+        json={"confirm_option_number": 1},
+    )
+    assert undone.status_code == 200
+    db_session.refresh(menu)
+    db_session.refresh(kitchen)
+    assert menu.price == old_price
+    assert kitchen.plan_version == plan_version + 1
+    undo_audit = db_session.get(AuditLog, UUID(undone.json()["audit_id"]))
+    assert undo_audit.event_type == "undo_executed"
+    assert undo_audit.before_snapshot["menu_items"][0]["price"] == "205.00"
+    assert undo_audit.after_snapshot["menu_items"][0]["price"] == "180.00"
+
+
+def test_price_change_wrong_option_number_is_rejected(client, db_session):
+    menu = db_session.scalar(select(MenuItem).where(MenuItem.name == "Paneer Biryani"))
+    old_price = menu.price
+    response = client.post("/api/pricing/analyze", json={
+        "menu_item_id": str(menu.id), "propose_change": True,
+    })
+    action_id = response.json()["action"]["id"]
+    approved = client.post(f"/api/actions/{action_id}/approve", json={"confirm_option_number": 2})
+    assert approved.status_code == 422
+    assert approved.json()["error"]["code"] == "OPTION_MISMATCH"
+    db_session.refresh(menu)
+    assert menu.price == old_price
+
+
+def test_expired_price_change_is_rejected(client, db_session):
+    menu = db_session.scalar(select(MenuItem).where(MenuItem.name == "Paneer Biryani"))
+    response = client.post("/api/pricing/analyze", json={
+        "menu_item_id": str(menu.id), "propose_change": True,
+    })
+    action = db_session.get(ProposedAction, UUID(response.json()["action"]["id"]))
+    action.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    db_session.flush()
+    approved = client.post(f"/api/actions/{action.id}/approve", json={"confirm_option_number": 1})
+    assert approved.status_code == 409
+    assert approved.json()["error"]["code"] == "ACTION_EXPIRED"
+    db_session.refresh(menu)
+    assert menu.price == Decimal("180.00")
+
+
+def test_deleted_menu_item_price_change_returns_not_found(client, db_session):
+    kitchen = db_session.scalar(select(Kitchen).limit(1))
+    menu = MenuItem(
+        id=uuid4(), kitchen_id=kitchen.id, name=f"Unreferenced test dish {uuid4()}",
+        price=Decimal("25.00"), packaging_cost=Decimal("5.00"), prep_minutes=10,
+        cook_minutes=15, is_active=True, data_source="simulated",
+    )
+    db_session.add(menu)
+    db_session.flush()
+    plan_version = kitchen.plan_version
+    response = client.post("/api/pricing/analyze", json={
+        "menu_item_id": str(menu.id), "propose_change": True,
+    })
+    action_id = response.json()["action"]["id"]
+    db_session.execute(delete(MenuItem).where(MenuItem.id == menu.id))
+    db_session.flush()
+    approved = client.post(f"/api/actions/{action_id}/approve", json={"confirm_option_number": 1})
+    assert approved.status_code == 404
+    assert approved.json()["error"]["code"] == "MENU_ITEM_NOT_FOUND"
+    assert db_session.scalar(select(AuditLog.id).where(AuditLog.action_id == UUID(action_id))) is None
+    assert db_session.get(ProposedAction, UUID(action_id)).status == "pending"
+    assert db_session.scalar(select(Kitchen.plan_version).where(Kitchen.id == kitchen.id)) == plan_version
 
 
 def test_approve_order_intake_success(client, db_session):

@@ -608,12 +608,13 @@ def _apply_emergency_purchase(
 
 
 _UNDO_MODELS = {
+    "menu_items": MenuItem,
     "ingredients": Ingredient,
     "orders": Order,
     "order_items": OrderItem,
     "plan_tasks": PlanTask,
 }
-_UNDO_RESTORE_ORDER = ("orders", "order_items", "plan_tasks", "ingredients")
+_UNDO_RESTORE_ORDER = ("menu_items", "orders", "order_items", "plan_tasks", "ingredients")
 _UNDO_DELETE_ORDER = ("plan_tasks", "order_items", "orders", "ingredients")
 
 
@@ -959,10 +960,61 @@ def _apply_order_intake(
     return changes, [], before_snapshot, after_snapshot, audit_summary
 
 
+def _apply_price_change(
+    db: Session,
+    *,
+    kitchen: Kitchen,
+    action: ProposedAction,
+    now: datetime,
+    transcript: str | None = None,
+) -> tuple[ActionChangesOut, list[CustomerMessageOut], dict, dict, str]:
+    payload = action.payload or {}
+    try:
+        menu_item_id = UUID(str(payload["menu_item_id"]))
+    except (KeyError, TypeError, ValueError):
+        menu_item_id = None
+    if menu_item_id is None:
+        raise AppError(404, "MENU_ITEM_NOT_FOUND", "Menu item not found")
+    try:
+        new_price = Decimal(str(payload["new_price"]))
+    except (KeyError, TypeError, ValueError, InvalidOperation):
+        raise AppError(422, "VALIDATION_ERROR", "new_price must be a valid price")
+    if not new_price.is_finite() or new_price < 0:
+        raise AppError(422, "VALIDATION_ERROR", "new_price must be nonnegative")
+
+    before_snapshot: dict[str, list[dict]] = {}
+    after_snapshot: dict[str, list[dict]] = {}
+    with db.begin_nested():
+        item = db.scalar(
+            select(MenuItem)
+            .where(MenuItem.id == menu_item_id, MenuItem.kitchen_id == kitchen.id)
+            .with_for_update()
+        )
+        if item is None:
+            raise AppError(404, "MENU_ITEM_NOT_FOUND", "Menu item not found")
+        old_price = item.price
+        before_snapshot["menu_items"] = [_snapshot_row(item)]
+        item.price = new_price
+        db.flush()
+        after_snapshot["menu_items"] = [_snapshot_row(item)]
+
+    summary = f"Changed {item.name} price from ₹{old_price:.2f} to ₹{new_price:.2f}"
+    if transcript:
+        summary += f" (transcript: {transcript})"
+    return (
+        ActionChangesOut(orders_affected=[], tasks_rescheduled=0, summary=summary),
+        [],
+        before_snapshot,
+        after_snapshot,
+        summary,
+    )
+
+
 APPLIERS = {
     ("recovery", "substitute"): _apply_substitute,
     ("recovery", "dish_swap"): _apply_dish_swap,
     ("recovery", "emergency_purchase"): _apply_emergency_purchase,
+    ("price_change", None): _apply_price_change,
     ("undo", None): _apply_undo,
     ("order_intake", None): _apply_order_intake,
     ("order_intake", "order_intake"): _apply_order_intake,
@@ -1094,8 +1146,11 @@ def approve_action(
 
     # Increment kitchen plan version
     plan_version_before = kitchen_locked.plan_version
-    plan_version_after = plan_version_before + 1
-    kitchen_locked.plan_version = plan_version_after
+    if action.action_type == "price_change":
+        plan_version_after = plan_version_before
+    else:
+        plan_version_after = plan_version_before + 1
+        kitchen_locked.plan_version = plan_version_after
 
     # Record audit log
     audit_entry = record_audit_log(
