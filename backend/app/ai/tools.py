@@ -115,7 +115,8 @@ BEDROCK_TOOLS: list[dict[str, Any]] = [
                         "date": {
                             "type": "string",
                             "description": (
-                                "Date of shortage in YYYY-MM-DD format. "
+                                "Operational date of shortage in YYYY-MM-DD format (must match the "
+                                "operational date from get_brief or the conversation). "
                                 "Defaults to tomorrow in IST if omitted."
                             ),
                         },
