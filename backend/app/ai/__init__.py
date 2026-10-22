@@ -12,6 +12,8 @@ from app.ai.tools import (
     BEDROCK_TOOLS,
     dispatch_tool,
     execute_tool_for_converse,
+    get_groq_tool_declarations,
+    get_openai_tool_declarations,
     get_tool_config,
     get_tool_specs,
 )
@@ -27,6 +29,8 @@ __all__ = [
     "dispatch_tool",
     "execute_tool_for_converse",
     "get_bedrock_client",
+    "get_groq_tool_declarations",
+    "get_openai_tool_declarations",
     "get_tool_config",
     "get_tool_specs",
     "parse_converse_response",

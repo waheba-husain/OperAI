@@ -5,6 +5,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
 
+import httpx
+
 from app.config import settings
 from app.errors import AppError
 
@@ -78,64 +80,126 @@ def _parse_extracted_json(raw_json_str: str) -> RawExtractedOrder:
         ) from exc
 
 
-def extract_order_with_bedrock(text: str) -> RawExtractedOrder:
+def extract_order_with_groq(text: str) -> RawExtractedOrder:
     """
-    Invokes Amazon Bedrock Converse API with structured extraction prompt.
-    Raises AppError(502, 'AI_UNAVAILABLE') if Bedrock is unreachable or boto3 is not installed.
+    Invokes Groq Chat Completions API with structured extraction prompt.
+    Raises AppError(502, 'AI_UNAVAILABLE') if Groq is unreachable or credentials are missing.
     """
-    try:
-        import boto3
-        from botocore.exceptions import BotoCoreError, ClientError
-    except ImportError as err:
-        logger.warning("boto3 is not installed: %s", err)
+    api_key = settings.groq_api_key or settings.gemini_api_key
+    if not api_key:
+        logger.error("AI API key is missing or not configured for extraction")
         raise AppError(
             502,
             "AI_UNAVAILABLE",
-            "Bedrock unreachable",
-            {"detail": "boto3 is not available"},
-        ) from err
-
-    model_id = getattr(settings, "bedrock_model_id", "anthropic.claude-3-haiku-20240307-v1:0")
-    region_name = getattr(settings, "aws_region", "us-east-1")
-
-    try:
-        client = boto3.client("bedrock-runtime", region_name=region_name)
-        response = client.converse(
-            modelId=model_id,
-            system=[{"text": SYSTEM_PROMPT}],
-            messages=[
-                {
-                    "role": "user",
-                    "content": [{"text": f"Customer Message:\n---\n{text}\n---"}],
-                }
-            ],
-            inferenceConfig={"temperature": 0.0, "maxTokens": 1000},
+            "AI credentials are not configured or incomplete.",
         )
-        content_blocks = response.get("output", {}).get("message", {}).get("content", [])
-        if not content_blocks or "text" not in content_blocks[0]:
-            raise AppError(422, "EXTRACTION_FAILED", "No order could be found in the text")
-        raw_text = content_blocks[0]["text"]
-        return _parse_extracted_json(raw_text)
-    except AppError:
-        raise
-    except (BotoCoreError, ClientError) as exc:
-        logger.error("Bedrock Converse failed: %s", exc)
+
+    model_id = (
+        settings.groq_model_id
+        if (
+            settings.groq_model_id
+            and (
+                settings.groq_model_id.startswith("openai/")
+                or "gpt" in settings.groq_model_id
+                or "llama" in settings.groq_model_id
+            )
+        )
+        else "openai/gpt-oss-120b"
+    )
+
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    payload: dict[str, Any] = {
+        "model": model_id,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": f"Customer Message:\n---\n{text}\n---",
+            },
+        ],
+        "response_format": {"type": "json_object"},
+        "temperature": 0.0,
+    }
+
+    try:
+        with httpx.Client(timeout=30.0) as http_client:
+            resp = http_client.post(url, headers=headers, json=payload)
+    except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.TimeoutException) as exc:
+        logger.error("AI extraction connection/timeout error: %s", type(exc).__name__)
         raise AppError(
             502,
             "AI_UNAVAILABLE",
-            "Bedrock unreachable",
-            {"error": str(exc)},
+            "AI service connection timed out or unreachable.",
+        ) from exc
+    except httpx.NetworkError as exc:
+        logger.error("AI extraction network error: %s", type(exc).__name__)
+        raise AppError(
+            502,
+            "AI_UNAVAILABLE",
+            "AI service connection timed out or unreachable.",
         ) from exc
     except Exception as exc:
-        logger.error("Unexpected error during Bedrock extraction: %s", exc)
+        logger.error("Unexpected error during AI extraction: %s", type(exc).__name__)
         raise AppError(
-            500,
-            "INTERNAL_ERROR",
-            "Failed to extract order",
-            {"error": str(exc)},
+            502,
+            "AI_UNAVAILABLE",
+            "AI service failed unexpectedly.",
         ) from exc
+
+    if resp.status_code != 200:
+        err_body = (
+            resp.json().get("error", {})
+            if resp.headers.get("content-type", "").startswith("application/json")
+            else {}
+        )
+        err_code = err_body.get("code") or err_body.get("status") or str(resp.status_code)
+        err_msg = err_body.get("message", "")
+        logger.error("AI extraction API error %s: %s", err_code, err_msg)
+        if resp.status_code in (401, 403):
+            raise AppError(
+                502,
+                "AI_UNAVAILABLE",
+                "AI credentials are not configured or invalid.",
+            )
+        if resp.status_code == 429:
+            raise AppError(
+                502,
+                "AI_UNAVAILABLE",
+                f"AI service rate limit exceeded ({err_code}).",
+            )
+        raise AppError(
+            502,
+            "AI_UNAVAILABLE",
+            f"AI service returned an error ({err_code}).",
+        )
+
+    try:
+        res_json = resp.json()
+        choices = res_json.get("choices", [])
+        if not choices:
+            raise AppError(422, "EXTRACTION_FAILED", "No order could be found in the text")
+        raw_text = choices[0].get("message", {}).get("content", "")
+    except Exception as exc:
+        if isinstance(exc, AppError):
+            raise
+        logger.error("Failed to parse JSON response from AI extraction: %s", type(exc).__name__)
+        raise AppError(422, "EXTRACTION_FAILED", "No order could be found in the text") from exc
+
+    if not raw_text or not raw_text.strip():
+        raise AppError(422, "EXTRACTION_FAILED", "No order could be found in the text")
+
+    return _parse_extracted_json(raw_text)
+
+
+def extract_order_with_bedrock(text: str) -> RawExtractedOrder:
+    """Backward-compatible entry point delegating to Groq."""
+    return extract_order_with_groq(text)
 
 
 def extract_order_from_text(text: str) -> RawExtractedOrder:
     """Public extraction entry point that can be mocked in unit and integration tests."""
-    return extract_order_with_bedrock(text)
+    return extract_order_with_groq(text)

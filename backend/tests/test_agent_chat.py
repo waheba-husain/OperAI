@@ -1102,3 +1102,196 @@ class TestAgentChatMultiTurnContextAndRecoveryRouting:
         )
         assert resp2.status_code == 422
         assert resp2.json()["error"]["code"] == "VALIDATION_ERROR"
+
+    def test_brief_for_date_followed_by_recovery_carries_exact_date(self, client):
+        """Regression test: Brief for 2026-10-23 followed by recovery request uses 2026-10-23."""
+        tool_call_result = _make_converse_result(
+            text="",
+            content=[
+                {
+                    "toolUse": {
+                        "toolUseId": "tool_rec_01",
+                        "name": "propose_recovery",
+                        "input": {
+                            "ingredient_name": "Paneer",
+                            "date": "2026-10-23",
+                        },
+                    }
+                }
+            ],
+            stop_reason="tool_use",
+        )
+        final_text_result = _make_converse_result(
+            "Paneer is short for October 23. Option 1: Swap for tofu. Say confirm option 1."
+        )
+
+        mock_bedrock = MagicMock(spec=BedrockClient)
+        mock_bedrock.converse.side_effect = [tool_call_result, final_text_result]
+
+        app.dependency_overrides[get_bedrock_client] = lambda: mock_bedrock
+        try:
+            with patch(
+                "app.ai.tools.propose_recovery",
+                return_value=RecoveryProposeResponse(
+                    group_id=uuid4(),
+                    shortage=RecoveryShortage(
+                        ingredient_id=uuid4(),
+                        name="Paneer",
+                        short_by=Decimal("1.0"),
+                        unit="kg",
+                    ),
+                    baseline=RecoveryBaseline(
+                        late_orders=4,
+                        revenue_at_risk=Decimal("1180.00"),
+                        extra_cost=Decimal("0.00"),
+                    ),
+                    scoring=RecoveryScoring(
+                        weights=RecoveryWeights(
+                            lateness=Decimal("0.5"),
+                            margin=Decimal("0.3"),
+                            customer_risk=Decimal("0.2"),
+                        )
+                    ),
+                    recommended_option_number=1,
+                    options=[],
+                ),
+            ) as mock_propose:
+                response = client.post(
+                    "/api/agent/chat",
+                    json={
+                        "message": "How do we recover from the paneer shortage?",
+                        "history": [
+                            {"role": "user", "content": "What is my morning risk brief?"},
+                            {
+                                "role": "assistant",
+                                "content": "Good morning. For 2026-10-23, Paneer is short by 1.0 kg with 4 orders at risk.",
+                            },
+                        ],
+                    },
+                )
+                assert response.status_code == 200
+                data = response.json()
+                assert data["tool_used"] == "propose_recovery"
+                # Verify propose_recovery was called with target_date = 2026-10-23
+                mock_propose.assert_called_once()
+                call_kwargs = mock_propose.call_args.kwargs
+                assert call_kwargs["target_date"] == date(2026, 10, 23)
+        finally:
+            app.dependency_overrides.pop(get_bedrock_client, None)
+
+    def test_explicitly_requested_date_is_preserved_in_recovery(self, client):
+        """Regression test: User-specified date is strictly preserved without overriding."""
+        tool_call_result = _make_converse_result(
+            text="",
+            content=[
+                {
+                    "toolUse": {
+                        "toolUseId": "tool_rec_02",
+                        "name": "propose_recovery",
+                        "input": {
+                            "ingredient_name": "Paneer",
+                            "date": "2026-10-25",
+                        },
+                    }
+                }
+            ],
+            stop_reason="tool_use",
+        )
+        final_text_result = _make_converse_result(
+            "Options for October 25 have been prepared."
+        )
+
+        mock_bedrock = MagicMock(spec=BedrockClient)
+        mock_bedrock.converse.side_effect = [tool_call_result, final_text_result]
+
+        app.dependency_overrides[get_bedrock_client] = lambda: mock_bedrock
+        try:
+            with patch(
+                "app.ai.tools.propose_recovery",
+                return_value=RecoveryProposeResponse(
+                    group_id=uuid4(),
+                    shortage=RecoveryShortage(
+                        ingredient_id=uuid4(),
+                        name="Paneer",
+                        short_by=Decimal("1.0"),
+                        unit="kg",
+                    ),
+                    baseline=RecoveryBaseline(
+                        late_orders=2,
+                        revenue_at_risk=Decimal("500.00"),
+                        extra_cost=Decimal("0.00"),
+                    ),
+                    scoring=RecoveryScoring(
+                        weights=RecoveryWeights(
+                            lateness=Decimal("0.5"),
+                            margin=Decimal("0.3"),
+                            customer_risk=Decimal("0.2"),
+                        )
+                    ),
+                    recommended_option_number=1,
+                    options=[],
+                ),
+            ) as mock_propose:
+                response = client.post(
+                    "/api/agent/chat",
+                    json={
+                        "message": "We have a paneer shortage on 2026-10-25",
+                    },
+                )
+                assert response.status_code == 200
+                mock_propose.assert_called_once()
+                assert mock_propose.call_args.kwargs["target_date"] == date(2026, 10, 25)
+        finally:
+            app.dependency_overrides.pop(get_bedrock_client, None)
+
+    def test_missing_production_plan_for_genuinely_requested_date_returns_structured_error(self, client):
+        """Regression test: Genuinely missing production plan returns PLAN_NOT_FOUND structured error."""
+        tool_call_result = _make_converse_result(
+            text="",
+            content=[
+                {
+                    "toolUse": {
+                        "toolUseId": "tool_rec_03",
+                        "name": "propose_recovery",
+                        "input": {
+                            "ingredient_name": "Paneer",
+                            "date": "2026-10-22",
+                        },
+                    }
+                }
+            ],
+            stop_reason="tool_use",
+        )
+        final_text_result = _make_converse_result(
+            "There's no production plan for 2026-10-22 in the system. Please generate the daily plan through the Plan tab first."
+        )
+
+        mock_bedrock = MagicMock(spec=BedrockClient)
+        mock_bedrock.converse.side_effect = [tool_call_result, final_text_result]
+
+        app.dependency_overrides[get_bedrock_client] = lambda: mock_bedrock
+        try:
+            with patch(
+                "app.ai.tools.propose_recovery",
+                side_effect=AppError(
+                    404,
+                    "PLAN_NOT_FOUND",
+                    "No plan found for the requested date",
+                    {"date": "2026-10-22"},
+                ),
+            ):
+                response = client.post(
+                    "/api/agent/chat",
+                    json={
+                        "message": "Fix the paneer shortage on 2026-10-22",
+                    },
+                )
+                assert response.status_code == 200
+                data = response.json()
+                assert data["intent"] == "report_shortage"
+                assert data["tool_used"] == "propose_recovery"
+                assert data["data"] is None
+                assert "existing production plan" in data["reply"] or "no production plan" in data["reply"].lower()
+                assert data["requires_confirmation"] is False
+        finally:
+            app.dependency_overrides.pop(get_bedrock_client, None)

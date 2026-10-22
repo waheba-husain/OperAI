@@ -115,7 +115,8 @@ BEDROCK_TOOLS: list[dict[str, Any]] = [
                         "date": {
                             "type": "string",
                             "description": (
-                                "Date of shortage in YYYY-MM-DD format. "
+                                "Operational date of shortage in YYYY-MM-DD format (must match the "
+                                "operational date from get_brief or the conversation). "
                                 "Defaults to tomorrow in IST if omitted."
                             ),
                         },
@@ -193,6 +194,26 @@ def get_tool_specs() -> list[dict[str, Any]]:
 def get_tool_config() -> dict[str, Any]:
     """Returns the complete toolConfig dictionary for Bedrock Converse API calls."""
     return {"tools": get_tool_specs()}
+
+
+def get_openai_tool_declarations() -> list[dict[str, Any]]:
+    """Converts tool specs to OpenAI/Groq function-tool declarations format."""
+    declarations = []
+    for spec in BEDROCK_TOOLS:
+        ts = spec["toolSpec"]
+        input_schema = ts["inputSchema"]["json"]
+        declarations.append({
+            "type": "function",
+            "function": {
+                "name": ts["name"],
+                "description": ts["description"],
+                "parameters": input_schema,
+            },
+        })
+    return declarations
+
+
+get_groq_tool_declarations = get_openai_tool_declarations
 
 
 def get_gemini_tool_declarations() -> list[dict[str, Any]]:
