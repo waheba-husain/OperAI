@@ -1,13 +1,16 @@
 from decimal import ROUND_CEILING, Decimal
-from uuid import UUID
+from datetime import datetime, timedelta, timezone
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.config import settings
 from app.errors import AppError
-from app.models import MenuItem, RecipeItem
+from app.models import Ingredient, MenuItem, ProposedAction, RecipeItem
 from app.services.kitchen import get_kitchen
 from app.services.pricing import as_money, compute_dish_economics
+from app.services.recovery import _fingerprint
 
 FIVE = Decimal("5")
 HUNDRED = Decimal("100")
@@ -27,7 +30,13 @@ def _economics(item, kitchen, price: Decimal):
     )
 
 
-def analyze_price(db: Session, menu_item_id: UUID, price: Decimal | None) -> dict:
+def analyze_price(
+    db: Session,
+    menu_item_id: UUID,
+    price: Decimal | None,
+    *,
+    propose_change: bool = False,
+) -> dict:
     kitchen = get_kitchen(db)
     item = db.scalar(
         select(MenuItem)
@@ -59,7 +68,7 @@ def analyze_price(db: Session, menu_item_id: UUID, price: Decimal | None) -> dic
     suggested_price = as_money((raw / FIVE).to_integral_value(rounding=ROUND_CEILING) * FIVE)
     sug = _economics(item, kitchen, suggested_price)
 
-    return {
+    response = {
         "menu_item_id": item.id,
         "name": item.name,
         "analyzed_price": float(analyzed_price),
@@ -83,5 +92,46 @@ def analyze_price(db: Session, menu_item_id: UUID, price: Decimal | None) -> dic
             "target_margin_pct": float(kitchen.target_margin_pct),
             "data_source": item.data_source,
         },
-        "action": None,  # propose_change comes after feature 5
+        "action": None,
     }
+    if propose_change:
+        before = _economics(item, kitchen, current_price)
+        now_utc = datetime.now(timezone.utc)
+        ingredients = db.scalars(
+            select(Ingredient).where(Ingredient.kitchen_id == kitchen.id)
+        ).all()
+        action = ProposedAction(
+            id=uuid4(),
+            kitchen_id=kitchen.id,
+            group_id=uuid4(),
+            option_number=1,
+            action_type="price_change",
+            title=f"Set {item.name} price to ₹{suggested_price:.2f}",
+            payload={
+                "menu_item_id": str(item.id),
+                "old_price": str(current_price),
+                "new_price": str(suggested_price),
+            },
+            impact={
+                "profit_per_order_before": float(before.profit),
+                "profit_per_order_after": float(sug.profit),
+            },
+            status="pending",
+            base_plan_version=kitchen.plan_version,
+            stock_fingerprint=_fingerprint(ingredients),
+            created_at=now_utc,
+            expires_at=now_utc + timedelta(minutes=settings.recovery_action_ttl_minutes),
+        )
+        db.add(action)
+        db.flush()
+        response["action"] = {
+            "id": action.id,
+            "group_id": action.group_id,
+            "option_number": action.option_number,
+            "action_type": action.action_type,
+            "title": action.title,
+            "status": action.status,
+            "impact": action.impact,
+            "expires_at": action.expires_at,
+        }
+    return response

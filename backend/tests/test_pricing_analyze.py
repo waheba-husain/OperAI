@@ -1,3 +1,13 @@
+from datetime import datetime, timezone
+from uuid import UUID
+
+from sqlalchemy import func, select
+
+from app.config import settings
+from app.models import Ingredient, MenuItem, ProposedAction
+from app.services.recovery import _fingerprint
+
+
 def _biryani_id(client):
     items = client.get("/api/menu").json()["data"]
     return next(i["id"] for i in items if i["name"] == "Paneer Biryani")
@@ -35,13 +45,53 @@ def test_matches_menu_endpoint(client):
     assert float(r.json()["margin_pct"]) == float(biryani["margin_pct"])
 
 
-def test_propose_change_is_ignored(client):
+def test_propose_change_false_creates_no_action(client, db_session):
+    before = db_session.scalar(select(func.count(ProposedAction.id)))
     r = client.post(
         "/api/pricing/analyze",
-        json={"menu_item_id": _biryani_id(client), "propose_change": True},
+        json={"menu_item_id": _biryani_id(client), "propose_change": False},
     )
     assert r.status_code == 200
     assert r.json()["action"] is None
+    after = db_session.scalar(select(func.count(ProposedAction.id)))
+    assert after == before
+
+
+def test_propose_change_creates_pending_price_action(client, db_session):
+    menu_item_id = UUID(_biryani_id(client))
+    menu = db_session.get(MenuItem, menu_item_id)
+    old_price = menu.price
+    ingredients = db_session.scalars(select(Ingredient)).all()
+    now = datetime.now(timezone.utc)
+    response = client.post(
+        "/api/pricing/analyze",
+        json={"menu_item_id": str(menu_item_id), "price": 150, "propose_change": True},
+    )
+    assert response.status_code == 201
+    body = response.json()
+    action_out = body["action"]
+    assert action_out["action_type"] == "price_change"
+    assert action_out["status"] == "pending"
+    assert action_out["option_number"] == 1
+    assert action_out["title"] == "Set Paneer Biryani price to ₹205.00"
+    action = db_session.get(ProposedAction, UUID(action_out["id"]))
+    assert action is not None
+    assert action.payload == {
+        "menu_item_id": str(menu_item_id),
+        "old_price": str(old_price),
+        "new_price": "205.00",
+    }
+    assert action.impact == {
+        "profit_per_order_before": 36.2,
+        "profit_per_order_after": 53.2,
+    }
+    assert action.base_plan_version == 1
+    assert action.stock_fingerprint == _fingerprint(ingredients)
+    expires_at = datetime.fromisoformat(action_out["expires_at"])
+    assert expires_at == action.expires_at.replace(tzinfo=timezone.utc)
+    assert 0 < (expires_at - now).total_seconds() <= settings.recovery_action_ttl_minutes * 60 + 1
+    db_session.refresh(menu)
+    assert menu.price == old_price
 
 
 def test_unknown_menu_item(client):
