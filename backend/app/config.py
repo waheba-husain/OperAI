@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     recovery_action_ttl_minutes: int = 30
     bedrock_model_id: str = DEFAULT_BEDROCK_MODEL_ID
     aws_region: str = DEFAULT_AWS_REGION
+    gemini_api_key: str = ""
+    gemini_model_id: str = "gemini-3.5-flash"
 
     @field_validator("bedrock_model_id", mode="before")
     @classmethod
@@ -49,6 +51,14 @@ class Settings(BaseSettings):
     @property
     def AWS_REGION(self) -> str:
         return self.aws_region
+
+    @property
+    def GEMINI_API_KEY(self) -> str:
+        return self.gemini_api_key
+
+    @property
+    def GEMINI_MODEL_ID(self) -> str:
+        return self.gemini_model_id
 
 
 settings = Settings()

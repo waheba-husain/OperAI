@@ -195,6 +195,31 @@ def get_tool_config() -> dict[str, Any]:
     return {"tools": get_tool_specs()}
 
 
+def get_gemini_tool_declarations() -> list[dict[str, Any]]:
+    """Converts tool specs to Gemini function declarations format."""
+    declarations = []
+    for spec in BEDROCK_TOOLS:
+        ts = spec["toolSpec"]
+        input_schema = ts["inputSchema"]["json"]
+        props: dict[str, Any] = {}
+        for prop_name, prop_def in input_schema.get("properties", {}).items():
+            t = prop_def.get("type", "string").upper()
+            props[prop_name] = {
+                "type": t,
+                "description": prop_def.get("description", ""),
+            }
+        declarations.append({
+            "name": ts["name"],
+            "description": ts["description"],
+            "parameters": {
+                "type": "OBJECT",
+                "properties": props,
+                "required": input_schema.get("required", []),
+            },
+        })
+    return declarations
+
+
 def _parse_date(date_str: str | None) -> date | None:
     if date_str is None or not date_str.strip():
         return None
