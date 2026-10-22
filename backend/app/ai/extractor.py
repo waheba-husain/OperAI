@@ -2,7 +2,7 @@ import json
 import logging
 import re
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
@@ -136,4 +136,9 @@ def extract_order_with_groq(text: str) -> RawExtractedOrder:
 
 def extract_order_from_text(text: str) -> RawExtractedOrder:
     """Public extraction entry point that can be mocked in unit and integration tests."""
+    return extract_order_with_groq(text)
+
+
+def extract_order_with_bedrock(text: str) -> RawExtractedOrder:
+    """Backward-compatible name for callers of the former extraction entry point."""
     return extract_order_with_groq(text)
