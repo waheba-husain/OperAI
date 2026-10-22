@@ -23,6 +23,7 @@ import {
   apiClient as defaultApiClient,
   ApiClient,
   getDefaultConfig,
+  completePlanTask,
   generatePlan,
   getOrders,
   getPlan,
@@ -77,6 +78,11 @@ export interface SchedulePlanDataResult {
   readonly summary: SchedulePlanSummary
   readonly tasks: readonly ScheduleTaskItem[]
   readonly lateOrderIds: readonly string[]
+  readonly isCompletingTask: boolean
+  readonly completingTaskId: string | null
+  readonly completeTaskError: ApiError | ConfigurationError | NetworkError | Error | null
+  readonly completeTaskSuccessMessage: string | null
+  readonly markTaskDone: (taskId: string) => Promise<boolean>
   readonly setTargetDate: (newDate: string) => void
   readonly generateSchedule: () => Promise<PlanGenerateResponseDTO | null>
   readonly clearGenerateState: () => void
@@ -108,6 +114,10 @@ export function useSchedulePlanData(options?: UseSchedulePlanDataOptions): Sched
   const [isGenerating, setIsGenerating] = useState<boolean>(false)
   const [generateError, setGenerateError] = useState<ApiError | ConfigurationError | NetworkError | Error | null>(null)
   const [generateSuccessMessage, setGenerateSuccessMessage] = useState<string | null>(null)
+  const [completingTaskId, setCompletingTaskId] = useState<string | null>(null)
+  const [completeTaskError, setCompleteTaskError] = useState<ApiError | ConfigurationError | NetworkError | Error | null>(null)
+  const [completeTaskSuccessMessage, setCompleteTaskSuccessMessage] = useState<string | null>(null)
+  const [demoCompletedTaskIds, setDemoCompletedTaskIds] = useState<ReadonlySet<string>>(new Set())
 
   const clearGenerateState = useCallback(() => {
     setGenerateError(null)
@@ -238,6 +248,36 @@ export function useSchedulePlanData(options?: UseSchedulePlanDataOptions): Sched
     }
   }, [isGenerating, targetDate, activeClient, fetchData])
 
+  const markTaskDone = useCallback(
+    async (taskId: string): Promise<boolean> => {
+      if (completingTaskId) {
+        return false
+      }
+      setCompletingTaskId(taskId)
+      setCompleteTaskError(null)
+      setCompleteTaskSuccessMessage(null)
+
+      try {
+        if (mode === 'live') {
+          const res = await completePlanTask(taskId, { client: activeClient })
+          setCompleteTaskSuccessMessage(res.message || 'Task marked as done')
+          await fetchData()
+        } else {
+          setDemoCompletedTaskIds((prev) => new Set([...prev, taskId]))
+          setCompleteTaskSuccessMessage('Task marked as done (demo mode)')
+        }
+        return true
+      } catch (err: unknown) {
+        const errorObj = err instanceof Error ? err : new Error(String(err))
+        setCompleteTaskError(errorObj)
+        return false
+      } finally {
+        setCompletingTaskId(null)
+      }
+    },
+    [completingTaskId, mode, activeClient, fetchData]
+  )
+
   useEffect(() => {
     const run = async () => {
       await fetchData()
@@ -275,6 +315,11 @@ export function useSchedulePlanData(options?: UseSchedulePlanDataOptions): Sched
       summary: livePayload.summary,
       tasks: livePayload.tasks,
       lateOrderIds: livePayload.plan?.late_orders ?? [],
+      isCompletingTask: completingTaskId !== null,
+      completingTaskId,
+      completeTaskError,
+      completeTaskSuccessMessage,
+      markTaskDone,
       setTargetDate: handleSetTargetDate,
       generateSchedule,
       clearGenerateState,
@@ -285,6 +330,20 @@ export function useSchedulePlanData(options?: UseSchedulePlanDataOptions): Sched
 
   // Demo mode or while loading/error
   const isLiveMode = mode === 'live'
+
+  const demoTasks =
+    demoCompletedTaskIds.size === 0
+      ? DEMO_SCHEDULE_ITEMS
+      : DEMO_SCHEDULE_ITEMS.map((item) =>
+          demoCompletedTaskIds.has(item.id)
+            ? {
+                ...item,
+                status: 'done' as const,
+                statusLabel: 'Done',
+                isLocked: true
+              }
+            : item
+        )
 
   return {
     mode,
@@ -302,8 +361,13 @@ export function useSchedulePlanData(options?: UseSchedulePlanDataOptions): Sched
     kitchenName: DEMO_SCHEDULE_METADATA.kitchenName,
     planVersion: isLiveMode ? '—' : DEMO_SCHEDULE_SUMMARY.planVersion,
     summary: isLiveMode ? deriveSchedulePlanSummary(null, targetDate) : DEMO_SCHEDULE_SUMMARY,
-    tasks: isLiveMode ? [] : DEMO_SCHEDULE_ITEMS,
+    tasks: isLiveMode ? [] : demoTasks,
     lateOrderIds: isLiveMode ? [] : DEMO_SCHEDULE_PLAN.late_orders,
+    isCompletingTask: completingTaskId !== null,
+    completingTaskId,
+    completeTaskError,
+    completeTaskSuccessMessage,
+    markTaskDone,
     setTargetDate: handleSetTargetDate,
     generateSchedule,
     clearGenerateState,

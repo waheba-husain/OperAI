@@ -14,9 +14,15 @@ import './ScheduleTaskCard.css'
 
 export interface ScheduleTaskCardProps {
   readonly task: ScheduleTaskItem
+  readonly onMarkDone?: (taskId: string) => Promise<boolean | void> | void
+  readonly isCompleting?: boolean
 }
 
-export function ScheduleTaskCard({ task }: ScheduleTaskCardProps) {
+export function ScheduleTaskCard({
+  task,
+  onMarkDone,
+  isCompleting = false
+}: ScheduleTaskCardProps) {
   const getStatusBadge = () => {
     switch (task.status) {
       case 'in_progress':
@@ -141,15 +147,47 @@ export function ScheduleTaskCard({ task }: ScheduleTaskCardProps) {
         </div>
       )}
 
-      {/* Footer / Mutation Policy Note */}
+      {/* Footer / Mutation Policy Note & Actions */}
       <div className="schedule-task-card__footer">
         <span className="schedule-task-card__policy-text">
-          {task.isLocked
-            ? '🔒 Locked task · Immovable by replanning'
-            : task.status === 'cancelled'
-              ? 'Cancelled task · Excluded from active service'
-              : 'Solver scheduled · Drag/edit disabled'}
+          {task.status === 'done'
+            ? '✓ Done · 🔒 Locked task'
+            : task.isLocked
+              ? '🔒 Locked task · Immovable by replanning'
+              : task.status === 'cancelled'
+                ? 'Cancelled task · Excluded from active service'
+                : 'Solver scheduled'}
         </span>
+
+        {task.status !== 'done' && task.status !== 'cancelled' && onMarkDone && (
+          <button
+            type="button"
+            className="schedule-task-card__done-btn"
+            onClick={(e) => {
+              e.stopPropagation()
+              if (!isCompleting) {
+                void onMarkDone(task.id)
+              }
+            }}
+            disabled={isCompleting}
+            aria-busy={isCompleting}
+            aria-label={`Mark preparation task for ${task.dish} as done`}
+          >
+            {isCompleting ? (
+              <>
+                <span className="schedule-task-card__spinner" aria-hidden="true" />
+                <span>Marking...</span>
+              </>
+            ) : (
+              <>
+                <svg viewBox="0 0 16 16" fill="currentColor" className="schedule-task-card__btn-icon" aria-hidden="true">
+                  <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z" />
+                </svg>
+                <span>Mark Done</span>
+              </>
+            )}
+          </button>
+        )}
       </div>
     </article>
   )

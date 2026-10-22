@@ -15,6 +15,8 @@ export {
   analyzePricing,
   approveAction,
   chatAgent,
+  completeOrder,
+  completePlanTask,
   generatePlan,
   getActions,
   getAudit,

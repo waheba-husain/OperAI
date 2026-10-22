@@ -25,7 +25,7 @@ import type {
   OrderViewModel,
   OrdersSummaryMetrics
 } from '../types/orders.ts'
-import { getOrders } from '../api/endpoints.ts'
+import { getOrders, completeOrder } from '../api/endpoints.ts'
 import { apiClient as defaultApiClient, ApiClient, getDefaultConfig } from '../api/client.ts'
 import { ApiError, ConfigurationError, NetworkError } from '../api/errors.ts'
 import {
@@ -74,6 +74,10 @@ export interface OrdersDataResult {
   readonly sortDirection: OrderSortDirection
   readonly selectedOrderId: string | null
   readonly selectedOrder: OrderViewModel | null
+  readonly isCompletingOrder: boolean
+  readonly completingOrderId: string | null
+  readonly completionError: ApiError | ConfigurationError | NetworkError | Error | null
+  readonly markOrderCompleted: (orderId: string) => Promise<boolean>
   readonly setSearchQuery: (query: string) => void
   readonly setStatusFilter: (status: OrderFilterTab) => void
   readonly setChannelFilter: (channel: 'all' | OrderChannelDTO) => void
@@ -132,6 +136,9 @@ export function useOrdersData(options?: UseOrdersDataOptions): OrdersDataResult 
   const [sortField, setSortField] = useState<OrderSortField>('deadline')
   const [sortDirection, setSortDirection] = useState<OrderSortDirection>('asc')
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
+  const [completingOrderId, setCompletingOrderId] = useState<string | null>(null)
+  const [completionError, setCompletionError] = useState<ApiError | ConfigurationError | NetworkError | Error | null>(null)
+  const [demoCompletedOrderIds, setDemoCompletedOrderIds] = useState<ReadonlySet<string>>(new Set())
 
   const abortControllerRef = useRef<AbortController | null>(null)
 
@@ -203,8 +210,41 @@ export function useOrdersData(options?: UseOrdersDataOptions): OrdersDataResult 
     if (mode === 'live') {
       return liveOrders ?? []
     }
-    return adaptOrdersToViewModels(DEMO_ORDERS, 'simulated', effectiveReferenceTime)
-  }, [mode, liveOrders, effectiveReferenceTime])
+    const source =
+      demoCompletedOrderIds.size === 0
+        ? DEMO_ORDERS
+        : DEMO_ORDERS.map((o) =>
+            demoCompletedOrderIds.has(o.id) ? { ...o, status: 'completed' as const } : o
+          )
+    return adaptOrdersToViewModels(source, 'simulated', effectiveReferenceTime)
+  }, [mode, liveOrders, demoCompletedOrderIds, effectiveReferenceTime])
+
+  const markOrderCompleted = useCallback(
+    async (orderId: string): Promise<boolean> => {
+      if (completingOrderId) {
+        return false
+      }
+      setCompletingOrderId(orderId)
+      setCompletionError(null)
+
+      try {
+        if (mode === 'live') {
+          await completeOrder(orderId, { client: activeClient })
+          await fetchData()
+        } else {
+          setDemoCompletedOrderIds((prev) => new Set([...prev, orderId]))
+        }
+        return true
+      } catch (err: unknown) {
+        const errorObj = err instanceof Error ? err : new Error(String(err))
+        setCompletionError(errorObj)
+        return false
+      } finally {
+        setCompletingOrderId(null)
+      }
+    },
+    [completingOrderId, mode, activeClient, fetchData]
+  )
 
   // Derive operational summary metrics from raw orders
   const summary = useMemo(() => {
@@ -296,6 +336,10 @@ export function useOrdersData(options?: UseOrdersDataOptions): OrdersDataResult 
     sortDirection,
     selectedOrderId,
     selectedOrder,
+    isCompletingOrder: completingOrderId !== null,
+    completingOrderId,
+    completionError,
+    markOrderCompleted,
     setSearchQuery,
     setStatusFilter,
     setChannelFilter,

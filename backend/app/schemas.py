@@ -165,6 +165,12 @@ class OrderListResponse(BaseModel):
     count: int
 
 
+class OrderCompleteResponse(BaseModel):
+    order: OrderOut
+    already_completed: bool = False
+    message: str = "Order marked as completed"
+
+
 class PlanGenerateRequest(BaseModel):
     date: date
     regenerate: bool = False
@@ -199,6 +205,12 @@ class PlanResponse(BaseModel):
     plan_version: int
     tasks: list[PlanTaskOut]
     late_orders: list[str] = Field(default_factory=list)
+
+
+class PlanTaskCompleteResponse(BaseModel):
+    task: PlanTaskOut
+    already_completed: bool = False
+    message: str = "Task marked as done"
 
 
 # Recovery Options schemas

@@ -23,10 +23,12 @@ import type {
   DailySummaryDTO,
   IngredientListResponseDTO,
   MenuListResponseDTO,
+  OrderCompleteResponseDTO,
   OrderListResponseDTO,
   OrderStatusDTO,
   PlanGenerateResponseDTO,
   PlanResponseDTO,
+  PlanTaskCompleteResponseDTO,
   PricingAnalysisResponseDTO,
   PricingAnalyzeRequestDTO,
   RecoveryProposeRequestDTO,
@@ -55,6 +57,21 @@ export async function getOrders(
 ): Promise<OrderListResponseDTO> {
   const client = options?.client ?? defaultClient
   return client.get<OrderListResponseDTO>('/api/orders', params, { signal: options?.signal })
+}
+
+/**
+ * Mark an order as completed (POST /api/orders/{orderId}/complete).
+ */
+export async function completeOrder(
+  orderId: string,
+  options?: { signal?: AbortSignal; client?: ApiClient }
+): Promise<OrderCompleteResponseDTO> {
+  const client = options?.client ?? defaultClient
+  return client.post<OrderCompleteResponseDTO>(
+    `/api/orders/${encodeURIComponent(orderId)}/complete`,
+    {},
+    { signal: options?.signal }
+  )
 }
 
 /* ── 2. Daily Plan & Schedule (Rest_API_Spec.md §3.7 & §3.8) ──────── */
@@ -93,6 +110,21 @@ export async function generatePlan(
   return client.post<PlanGenerateResponseDTO>(
     '/api/plan/generate',
     { date: params.date, regenerate: params.regenerate ?? false },
+    { signal: options?.signal }
+  )
+}
+
+/**
+ * Mark a schedule task as completed/done (POST /api/plan/tasks/{taskId}/complete).
+ */
+export async function completePlanTask(
+  taskId: string,
+  options?: { signal?: AbortSignal; client?: ApiClient }
+): Promise<PlanTaskCompleteResponseDTO> {
+  const client = options?.client ?? defaultClient
+  return client.post<PlanTaskCompleteResponseDTO>(
+    `/api/plan/tasks/${encodeURIComponent(taskId)}/complete`,
+    {},
     { signal: options?.signal }
   )
 }

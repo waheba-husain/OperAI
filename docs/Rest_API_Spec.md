@@ -39,6 +39,8 @@ Companion to the OperAI PRD, System Architecture and Database Schema. All exampl
 | 15 | POST | `/api/audit/{id}/undo` | Propose an undo |
 | 16 | POST | `/api/agent/chat` | Voice/text assistant (read and propose only) |
 | 17 | GET | `/api/summary` | Day-end summary |
+| 18 | POST | `/api/orders/{order_id}/complete` | Mark an eligible order as completed |
+| 19 | POST | `/api/plan/tasks/{task_id}/complete` | Mark a preparation task as done |
 
 ## 3. Endpoints
 
@@ -728,6 +730,89 @@ On a day with no executed actions all counts and amounts are 0.
 | 422 | VALIDATION\_ERROR | Invalid `date` |
 | 500 | INTERNAL\_ERROR | Backend failure |
 
+### 3.18 POST /api/orders/{order_id}/complete
+
+- **Method:** POST
+- **URL:** `/api/orders/{order_id}/complete`
+- **Purpose:** Mark an eligible order (status in `new`, `planned`, `in_progress`, `delayed`, `partial`) as completed. Idempotent: completing an already-completed order returns 200 with `already_completed: true`.
+- **Auth:** API key
+- **Request parameters:** `order_id` (UUID path parameter)
+- **Request body:** Empty `{}`
+
+**Example success response (200)**
+
+```json
+{
+  "order": {
+    "id": "ord-1234",
+    "customer_name": "Aarav Sharma",
+    "channel": "whatsapp",
+    "deadline": "2026-10-22T13:00:00+05:30",
+    "status": "completed",
+    "total_amount": 350.00,
+    "items": [
+      {
+        "menu_item_id": "m_biryani",
+        "name": "Paneer Biryani",
+        "quantity": 2,
+        "unit_price": 175.00
+      }
+    ]
+  },
+  "already_completed": false,
+  "message": "Order marked as completed"
+}
+```
+
+**Errors**
+
+| Status | Code | When |
+| --- | --- | --- |
+| 401 | UNAUTHORIZED | Missing or invalid API key |
+| 404 | ORDER\_NOT\_FOUND | Order ID does not exist or belongs to another kitchen |
+| 422 | INVALID\_STATUS\_TRANSITION | Order status is `cancelled` |
+| 500 | INTERNAL\_ERROR | Backend failure |
+
+### 3.19 POST /api/plan/tasks/{task_id}/complete
+
+- **Method:** POST
+- **URL:** `/api/plan/tasks/{task_id}/complete`
+- **Purpose:** Mark an eligible plan task (status in `scheduled`, `in_progress`) as done and set `locked = true` so replanning will never shift it. Idempotent: completing an already-done task returns 200 with `already_completed: true`.
+- **Auth:** API key
+- **Request parameters:** `task_id` (UUID path parameter)
+- **Request body:** Empty `{}`
+
+**Example success response (200)**
+
+```json
+{
+  "task": {
+    "id": "task-5678",
+    "order_id": "ord-1234",
+    "order_item_id": "item-9999",
+    "dish": "Paneer Biryani",
+    "task_type": "cook",
+    "burner_no": 1,
+    "cook_no": 1,
+    "start_at": "2026-10-22T11:00:00+05:30",
+    "end_at": "2026-10-22T11:35:00+05:30",
+    "status": "done",
+    "locked": true
+  },
+  "already_completed": false,
+  "message": "Task marked as done"
+}
+```
+
+**Errors**
+
+| Status | Code | When |
+| --- | --- | --- |
+| 401 | UNAUTHORIZED | Missing or invalid API key |
+| 404 | TASK\_NOT\_FOUND | Task ID does not exist or belongs to another kitchen |
+| 422 | INVALID\_STATUS\_TRANSITION | Task status is `cancelled` |
+| 500 | INTERNAL\_ERROR | Backend failure |
+
 ## 4. Status codes and error codes
 
 | Status | Meaning | Error codes |
@@ -735,9 +820,9 @@ On a day with no executed actions all counts and amounts are 0.
 | 200 | Success, nothing new stored |  |
 | 201 | Record or pending action created |  |
 | 401 | Missing or invalid API key | UNAUTHORIZED |
-| 404 | Resource not found | MENU\_ITEM\_NOT\_FOUND, INGREDIENT\_NOT\_FOUND, PLAN\_NOT\_FOUND, ACTION\_NOT\_FOUND, AUDIT\_NOT\_FOUND |
+| 404 | Resource not found | MENU\_ITEM\_NOT\_FOUND, INGREDIENT\_NOT\_FOUND, PLAN\_NOT\_FOUND, ACTION\_NOT\_FOUND, AUDIT\_NOT\_FOUND, ORDER\_NOT\_FOUND, TASK\_NOT\_FOUND |
 | 409 | State conflict | PLAN\_EXISTS, NO\_SHORTAGE\_DETECTED, ACTION\_NOT\_PENDING, ACTION\_EXPIRED, PLAN\_CHANGED, STOCK\_CHANGED, UNDO\_NOT\_ALLOWED |
-| 422 | Invalid input | VALIDATION\_ERROR, OPTION\_MISMATCH, EXTRACTION\_FAILED, NO\_ORDERS\_FOR\_DATE |
+| 422 | Invalid input | VALIDATION\_ERROR, OPTION\_MISMATCH, EXTRACTION\_FAILED, NO\_ORDERS\_FOR\_DATE, INVALID\_STATUS\_TRANSITION |
 | 500 | Server error (transactions roll back) | INTERNAL\_ERROR |
 | 502 | AI service unreachable | AI\_UNAVAILABLE |
 
