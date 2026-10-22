@@ -195,6 +195,26 @@ def get_tool_config() -> dict[str, Any]:
     return {"tools": get_tool_specs()}
 
 
+def get_openai_tool_declarations() -> list[dict[str, Any]]:
+    """Converts tool specs to OpenAI/Groq function-tool declarations format."""
+    declarations = []
+    for spec in BEDROCK_TOOLS:
+        ts = spec["toolSpec"]
+        input_schema = ts["inputSchema"]["json"]
+        declarations.append({
+            "type": "function",
+            "function": {
+                "name": ts["name"],
+                "description": ts["description"],
+                "parameters": input_schema,
+            },
+        })
+    return declarations
+
+
+get_groq_tool_declarations = get_openai_tool_declarations
+
+
 def get_gemini_tool_declarations() -> list[dict[str, Any]]:
     """Converts tool specs to Gemini function declarations format."""
     declarations = []
