@@ -90,6 +90,39 @@
   border-color: var(--color-border-hover);
 }
 
+.schedule-empty-btn--generate {
+  background: var(--color-primary);
+  color: #FFFFFF;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.schedule-empty-btn--generate:hover:not(:disabled) {
+  background: var(--color-primary-hover, #234734);
+}
+
+.schedule-empty-btn--generate:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.schedule-btn-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #FFFFFF;
+  border-radius: 50%;
+  animation: schedule-spin 0.8s linear infinite;
+  display: inline-block;
+}
+
+@keyframes schedule-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .schedule-empty-btn:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;

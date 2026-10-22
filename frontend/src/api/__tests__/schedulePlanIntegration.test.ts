@@ -26,7 +26,7 @@ import assert from 'node:assert/strict'
 
 import { ApiClient } from '../client.ts'
 import { ApiError } from '../errors.ts'
-import { getPlan } from '../endpoints.ts'
+import { getPlan, generatePlan } from '../endpoints.ts'
 import {
   adaptPlanTaskToScheduleItem,
   adaptPlanTasksToScheduleItems,
@@ -478,3 +478,113 @@ test('Schedule & Plan: verifies sequence counter discards older responses', asyn
   assert.equal(responses.length, 1)
   assert.equal(responses[0], '2026-10-18')
 })
+
+/* ── 12. Plan Generation Endpoint (POST /api/plan/generate) ──── */
+
+test('generatePlan: dispatches POST /api/plan/generate with target date and regenerate flag', async () => {
+  let capturedUrl = ''
+  let capturedMethod = ''
+  let capturedBody: unknown = null
+
+  const mockFetch: typeof fetch = async (input, init) => {
+    capturedUrl = String(input)
+    capturedMethod = init?.method ?? 'GET'
+    capturedBody = init?.body ? JSON.parse(String(init.body)) : null
+
+    return new Response(
+      JSON.stringify({
+        date: '2026-10-23',
+        plan_version: 2,
+        solver: 'greedy',
+        feasible: true,
+        orders_scheduled: 25,
+        task_count: 50,
+        late_orders: []
+      }),
+      { status: 201, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
+
+  const client = new ApiClient({
+    baseUrl: 'http://localhost:8000',
+    apiKey: 'test-api-key',
+    fetchFn: mockFetch
+  })
+
+  const result = await generatePlan({ date: '2026-10-23', regenerate: false }, { client })
+
+  assert.ok(capturedUrl.includes('/api/plan/generate'))
+  assert.equal(capturedMethod, 'POST')
+  assert.deepEqual(capturedBody, { date: '2026-10-23', regenerate: false })
+  assert.equal(result.plan_version, 2)
+  assert.equal(result.orders_scheduled, 25)
+  assert.equal(result.task_count, 50)
+  assert.equal(result.feasible, true)
+})
+
+test('generatePlan: surfaces 422 NO_ORDERS_FOR_DATE without falling back', async () => {
+  const mockFetch: typeof fetch = async () => {
+    return new Response(
+      JSON.stringify({
+        error: {
+          code: 'NO_ORDERS_FOR_DATE',
+          message: 'No orders found for date 2026-10-23',
+          details: { date: '2026-10-23' }
+        }
+      }),
+      { status: 422, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
+
+  const client = new ApiClient({
+    baseUrl: 'http://localhost:8000',
+    apiKey: 'test-api-key',
+    fetchFn: mockFetch
+  })
+
+  await assert.rejects(
+    async () => {
+      await generatePlan({ date: '2026-10-23' }, { client })
+    },
+    (err: unknown) => {
+      assert.ok(err instanceof ApiError)
+      assert.equal(err.status, 422)
+      assert.equal(err.code, 'NO_ORDERS_FOR_DATE')
+      return true
+    }
+  )
+})
+
+test('generatePlan: surfaces 409 PLAN_EXISTS conflict error', async () => {
+  const mockFetch: typeof fetch = async () => {
+    return new Response(
+      JSON.stringify({
+        error: {
+          code: 'PLAN_EXISTS',
+          message: 'A plan already exists for date 2026-10-23 and regenerate is false',
+          details: { date: '2026-10-23' }
+        }
+      }),
+      { status: 409, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
+
+  const client = new ApiClient({
+    baseUrl: 'http://localhost:8000',
+    apiKey: 'test-api-key',
+    fetchFn: mockFetch
+  })
+
+  await assert.rejects(
+    async () => {
+      await generatePlan({ date: '2026-10-23', regenerate: false }, { client })
+    },
+    (err: unknown) => {
+      assert.ok(err instanceof ApiError)
+      assert.equal(err.status, 409)
+      assert.equal(err.code, 'PLAN_EXISTS')
+      return true
+    }
+  )
+})
+

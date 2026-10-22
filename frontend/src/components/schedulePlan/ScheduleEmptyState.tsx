@@ -11,6 +11,9 @@ export interface ScheduleEmptyStateProps {
   readonly formattedDate: string
   readonly onSelectToday: () => void
   readonly onSwitchToDemo?: () => void
+  readonly onGenerateSchedule?: () => void
+  readonly isGenerating?: boolean
+  readonly isLive?: boolean
 }
 
 export function ScheduleEmptyState({
@@ -18,7 +21,10 @@ export function ScheduleEmptyState({
   targetDate,
   formattedDate,
   onSelectToday,
-  onSwitchToDemo
+  onSwitchToDemo,
+  onGenerateSchedule,
+  isGenerating,
+  isLive
 }: ScheduleEmptyStateProps) {
   return (
     <div className="schedule-empty-state" role="status" aria-live="polite">
@@ -42,11 +48,30 @@ export function ScheduleEmptyState({
 
       <p className="schedule-empty-state__description">
         {isPlanNotFound
-          ? `The constraint solver has not generated a prep schedule for ${formattedDate} (${targetDate}). Plans are solved and published during active service shifts.`
+          ? `The constraint solver has not generated a prep schedule for ${formattedDate} (${targetDate}). Click below to solve and generate a schedule based on active orders.`
           : `A plan version was published for ${formattedDate}, but no active preparation tasks are scheduled.`}
       </p>
 
       <div className="schedule-empty-state__actions">
+        {isPlanNotFound && isLive && onGenerateSchedule && (
+          <button
+            type="button"
+            className="schedule-empty-btn schedule-empty-btn--generate"
+            onClick={onGenerateSchedule}
+            disabled={isGenerating}
+            aria-busy={isGenerating}
+          >
+            {isGenerating ? (
+              <>
+                <span className="schedule-btn-spinner" aria-hidden="true" />
+                <span>Generating Schedule...</span>
+              </>
+            ) : (
+              <span>Generate Schedule</span>
+            )}
+          </button>
+        )}
+
         <button
           type="button"
           className="schedule-empty-btn schedule-empty-btn--primary"

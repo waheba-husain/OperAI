@@ -25,6 +25,7 @@ import type {
   MenuListResponseDTO,
   OrderListResponseDTO,
   OrderStatusDTO,
+  PlanGenerateResponseDTO,
   PlanResponseDTO,
   PricingAnalysisResponseDTO,
   PricingAnalyzeRequestDTO,
@@ -56,7 +57,7 @@ export async function getOrders(
   return client.get<OrderListResponseDTO>('/api/orders', params, { signal: options?.signal })
 }
 
-/* ── 2. Daily Plan & Schedule (Rest_API_Spec.md §3.8) ──────── */
+/* ── 2. Daily Plan & Schedule (Rest_API_Spec.md §3.7 & §3.8) ──────── */
 
 export interface GetPlanParams {
   /** Target schedule date in IST (format: YYYY-MM-DD, required) */
@@ -72,6 +73,28 @@ export async function getPlan(
 ): Promise<PlanResponseDTO> {
   const client = options?.client ?? defaultClient
   return client.get<PlanResponseDTO>('/api/plan', { date: params.date }, { signal: options?.signal })
+}
+
+export interface GeneratePlanParams {
+  /** Target schedule date in IST (format: YYYY-MM-DD, required) */
+  readonly date: string
+  /** Whether to overwrite/reschedule existing unlocked tasks (default: false) */
+  readonly regenerate?: boolean
+}
+
+/**
+ * Generate daily plan for target date using greedy constraint solver (Rest_API_Spec.md §3.7).
+ */
+export async function generatePlan(
+  params: GeneratePlanParams,
+  options?: { signal?: AbortSignal; client?: ApiClient }
+): Promise<PlanGenerateResponseDTO> {
+  const client = options?.client ?? defaultClient
+  return client.post<PlanGenerateResponseDTO>(
+    '/api/plan/generate',
+    { date: params.date, regenerate: params.regenerate ?? false },
+    { signal: options?.signal }
+  )
 }
 
 /* ── 3. Proactive Risk Brief (Rest_API_Spec.md §3.9) ───────── */

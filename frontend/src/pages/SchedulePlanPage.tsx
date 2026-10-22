@@ -55,6 +55,10 @@ export function SchedulePlanPage({ dataOptions }: SchedulePlanPageProps) {
     isMissingConfig,
     isEmpty,
     isPlanNotFound,
+    isGenerating,
+    generateError,
+    generateSuccessMessage,
+    generateSchedule,
     targetDate,
     formattedDate,
     planVersion,
@@ -318,6 +322,25 @@ export function SchedulePlanPage({ dataOptions }: SchedulePlanPageProps) {
         </div>
       </div>
 
+      {/* ── 2B. Generation Status Banners ────────────────────────── */}
+      {generateSuccessMessage && (
+        <div className="schedule-banner schedule-banner--success" role="status">
+          <span className="schedule-banner__icon">✓</span>
+          <div className="schedule-banner__content">
+            <strong>Schedule Published:</strong> {generateSuccessMessage}
+          </div>
+        </div>
+      )}
+
+      {generateError && (
+        <div className="schedule-banner schedule-banner--error" role="alert">
+          <span className="schedule-banner__icon">⚠</span>
+          <div className="schedule-banner__content">
+            <strong>Schedule Generation Notice:</strong> {generateError.message}
+          </div>
+        </div>
+      )}
+
       {/* ── 3. Summary Ribbon ────────────────────────────────────── */}
       <ScheduleSummaryRibbon summary={summary} />
 
@@ -378,6 +401,9 @@ export function SchedulePlanPage({ dataOptions }: SchedulePlanPageProps) {
           formattedDate={formattedDate}
           onSelectToday={() => setTargetDate(todayStr)}
           onSwitchToDemo={mode === 'live' ? () => setMode('demo') : undefined}
+          onGenerateSchedule={generateSchedule}
+          isGenerating={isGenerating}
+          isLive={isLive}
         />
       ) : filteredTasks.length === 0 ? (
         <div className="schedule-no-results">
