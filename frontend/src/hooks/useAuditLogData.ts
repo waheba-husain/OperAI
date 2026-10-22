@@ -69,6 +69,13 @@ import {
 
 export type AuditLogMode = 'live' | 'demo'
 
+const SERVER_AUDIT_EVENT_TYPES = new Set<AuditEventTypeDTO>([
+  'action_executed',
+  'action_rejected',
+  'undo_executed',
+  'order_created'
+])
+
 export interface UseAuditLogDataOptions {
   readonly client?: ApiClient
   readonly initialMode?: AuditLogMode
@@ -198,10 +205,11 @@ export function useAuditLogData(options?: UseAuditLogDataOptions): AuditLogDataR
     setError(null)
 
     try {
+      const canFilterOnServer = eventType !== undefined && SERVER_AUDIT_EVENT_TYPES.has(eventType)
       const response: AuditListResponseDTO = await getAudit(
         {
           limit,
-          event_type: eventType,
+          event_type: canFilterOnServer ? eventType : undefined,
           include_snapshots: includeSnapshots
         },
         {
@@ -215,7 +223,10 @@ export function useAuditLogData(options?: UseAuditLogDataOptions): AuditLogDataR
         return
       }
 
-      const adaptedLogs = adaptAuditLogsToViewModels(response.data)
+      const auditRows = eventType && !canFilterOnServer
+        ? response.data.filter((row) => row.event_type === eventType)
+        : response.data
+      const adaptedLogs = adaptAuditLogsToViewModels(auditRows)
       const derivedSummary = deriveAuditLogSummary(adaptedLogs)
 
       setLiveLogs(adaptedLogs)
