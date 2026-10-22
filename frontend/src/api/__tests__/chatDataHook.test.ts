@@ -830,3 +830,81 @@ test('ChatConversationController: voice transcript during in-flight request does
   assert.strictEqual(getCallCount(), 1) // Total API calls remains 1
 })
 
+/* ── 14. Multi-Turn Conversational History Integration ───────── */
+
+test('ChatConversationController: transmits prior conversation history in subsequent live turns', async () => {
+  const capturedRequests: unknown[] = []
+  const { client } = createMockClient({
+    onRequest: (payload) => {
+      capturedRequests.push(payload)
+    }
+  })
+
+  const controller = new ChatConversationController({ client, initialMode: 'live' })
+
+  // Turn 1
+  controller.setDraft('There is a shortage of tomato.')
+  await controller.sendMessage()
+
+  // First turn should not have history
+  assert.strictEqual(capturedRequests.length, 1)
+  assert.deepStrictEqual(capturedRequests[0], {
+    message: 'There is a shortage of tomato.',
+    input_mode: 'text'
+  })
+
+  // Turn 2
+  controller.setDraft('The shortage is for today, and I have four orders that use tomato.')
+  await controller.sendMessage()
+
+  assert.strictEqual(capturedRequests.length, 2)
+  const req2 = capturedRequests[1] as Record<string, unknown>
+  assert.strictEqual(req2.message, 'The shortage is for today, and I have four orders that use tomato.')
+  assert.strictEqual(req2.input_mode, 'text')
+  assert(Array.isArray(req2.history))
+  // Should contain user turn 1 and assistant turn 1
+  assert.strictEqual(req2.history.length, 2)
+  assert.strictEqual(req2.history[0].role, 'user')
+  assert.strictEqual(req2.history[0].content, 'There is a shortage of tomato.')
+  assert.strictEqual(req2.history[1].role, 'assistant')
+
+  // Turn 3
+  controller.setDraft('I currently have 1 kg and require 3 kg to complete the orders.')
+  await controller.sendMessage()
+
+  assert.strictEqual(capturedRequests.length, 3)
+  const req3 = capturedRequests[2] as Record<string, unknown>
+  assert.strictEqual(req3.message, 'I currently have 1 kg and require 3 kg to complete the orders.')
+  assert(Array.isArray(req3.history))
+  assert.strictEqual(req3.history.length, 4)
+})
+
+test('ChatConversationController: clearConversation resets conversation history so subsequent turns do not send cleared history', async () => {
+  const capturedRequests: unknown[] = []
+  const { client } = createMockClient({
+    onRequest: (payload) => {
+      capturedRequests.push(payload)
+    }
+  })
+
+  const controller = new ChatConversationController({ client, initialMode: 'live' })
+
+  // Turn 1
+  controller.setDraft('There is a shortage of tomato.')
+  await controller.sendMessage()
+
+  assert.strictEqual(capturedRequests.length, 1)
+
+  // User clears conversation
+  controller.clearConversation()
+  assert.strictEqual(controller.getSnapshot().messages.length, 0)
+
+  // Turn 2 after clear
+  controller.setDraft('What is the risk brief for tomorrow?')
+  await controller.sendMessage()
+
+  assert.strictEqual(capturedRequests.length, 2)
+  const reqAfterClear = capturedRequests[1] as Record<string, unknown>
+  assert.strictEqual(reqAfterClear.message, 'What is the risk brief for tomorrow?')
+  assert.strictEqual(reqAfterClear.history, undefined) // History was cleared!
+})

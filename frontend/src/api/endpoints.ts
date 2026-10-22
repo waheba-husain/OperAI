@@ -286,10 +286,22 @@ export async function chatAgent(
     })
   }
 
+  // Validate history if provided
+  if (data.history !== undefined) {
+    if (!Array.isArray(data.history)) {
+      throw new ApiError(422, {
+        code: 'VALIDATION_ERROR',
+        message: 'History must be an array of messages.',
+        details: { field: 'history' }
+      })
+    }
+  }
+
   const client = options?.client ?? defaultClient
   const payload: AgentChatRequestDTO = {
     message: data.message,
-    ...(data.input_mode ? { input_mode: data.input_mode } : {})
+    ...(data.input_mode ? { input_mode: data.input_mode } : {}),
+    ...(data.history && data.history.length > 0 ? { history: data.history } : {})
   }
 
   return client.post<AgentChatResponseDTO>('/api/agent/chat', payload, { signal: options?.signal })

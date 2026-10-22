@@ -99,6 +99,48 @@
   font-weight: var(--weight-medium);
 }
 
+.chat-proposal-card__actions {
+  display: flex;
+  align-items: center;
+  margin-top: var(--space-2);
+}
+
+.chat-proposal-card__nav-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.375rem 0.75rem;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-primary);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--duration-fast, 150ms) var(--ease-out, ease-out);
+}
+
+.chat-proposal-card__nav-button:hover {
+  background: var(--color-surface-secondary);
+  border-color: var(--color-primary);
+  color: var(--color-primary-hover);
+}
+
+.chat-proposal-card__nav-button:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.chat-proposal-card--simulated .chat-proposal-card__nav-button {
+  color: var(--color-warning);
+}
+
+.chat-proposal-card--simulated .chat-proposal-card__nav-button:hover {
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+}
+
 .chat-proposal-card__disclaimer {
   margin-top: var(--space-2);
   padding-top: var(--space-2);
