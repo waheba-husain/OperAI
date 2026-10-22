@@ -23,7 +23,7 @@ const ICON_ARROW = 'M5 12h14m-7-7l7 7-7 7'
 export function AiBriefingPanel({ briefing, onNavigate, isLive = false }: AiBriefingPanelProps) {
   const handleActionClick = () => {
     if (briefing.recommendedAction.targetPageId && onNavigate) {
-      onNavigate(briefing.recommendedAction.targetPageId as PageId)
+      onNavigate(briefing.recommendedAction.targetPageId)
     }
   }
 
