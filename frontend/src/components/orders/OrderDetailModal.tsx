@@ -10,6 +10,9 @@ import './OrderDetailModal.css'
 export interface OrderDetailModalProps {
   readonly order: OrderViewModel | null
   readonly onClose: () => void
+  readonly onMarkCompleted?: (orderId: string) => Promise<boolean | void> | void
+  readonly isCompleting?: boolean
+  readonly completionError?: Error | null
 }
 
 function getStatusClass(status: string): string {
@@ -33,7 +36,13 @@ function getStatusClass(status: string): string {
   }
 }
 
-export function OrderDetailModal({ order, onClose }: OrderDetailModalProps) {
+export function OrderDetailModal({
+  order,
+  onClose,
+  onMarkCompleted,
+  isCompleting = false,
+  completionError = null
+}: OrderDetailModalProps) {
   const dialogRef = useRef<HTMLDivElement | null>(null)
 
   // ESC key listener
@@ -67,6 +76,16 @@ export function OrderDetailModal({ order, onClose }: OrderDetailModalProps) {
     order.status !== 'completed' &&
     order.status !== 'cancelled' &&
     (order.status === 'delayed' || isOverdue)
+
+  const canComplete =
+    order.status !== 'completed' &&
+    order.status !== 'cancelled' &&
+    Boolean(onMarkCompleted)
+
+  const handleComplete = async () => {
+    if (!onMarkCompleted || isCompleting) return
+    await onMarkCompleted(order.id)
+  }
 
   return (
     <div
@@ -221,16 +240,52 @@ export function OrderDetailModal({ order, onClose }: OrderDetailModalProps) {
 
         {/* ── Modal Footer ────────────────────────────────────── */}
         <footer className="order-modal-footer">
-          <span className="order-modal-footer-hint">
-            Press <kbd>Esc</kbd> or click outside to dismiss.
-          </span>
-          <button
-            type="button"
-            className="order-modal-close-action-btn"
-            onClick={onClose}
-          >
-            Close
-          </button>
+          <div className="order-modal-footer__left">
+            <span className="order-modal-footer-hint">
+              Press <kbd>Esc</kbd> or click outside to dismiss.
+            </span>
+            {completionError && (
+              <span className="order-modal-error-text" role="alert">
+                ⚠️ {completionError.message}
+              </span>
+            )}
+          </div>
+
+          <div className="order-modal-footer__actions">
+            {canComplete && (
+              <button
+                type="button"
+                className="order-modal-complete-action-btn"
+                onClick={handleComplete}
+                disabled={isCompleting}
+                aria-busy={isCompleting}
+              >
+                {isCompleting ? (
+                  <>
+                    <span className="order-modal-spinner" aria-hidden="true" />
+                    <span>Completing...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>✓</span>
+                    <span>Mark as Completed</span>
+                  </>
+                )}
+              </button>
+            )}
+            {order.status === 'completed' && (
+              <span className="order-modal-completed-badge">
+                ✓ Order Completed
+              </span>
+            )}
+            <button
+              type="button"
+              className="order-modal-close-action-btn"
+              onClick={onClose}
+            >
+              Close
+            </button>
+          </div>
         </footer>
       </div>
     </div>

@@ -15,6 +15,9 @@ export {
   analyzePricing,
   approveAction,
   chatAgent,
+  completeOrder,
+  completePlanTask,
+  generatePlan,
   getActions,
   getAudit,
   getBrief,
@@ -28,6 +31,7 @@ export {
   undoAudit
 } from './endpoints'
 export type {
+  GeneratePlanParams,
   GetActionsParams,
   GetAuditParams,
   GetBriefParams,

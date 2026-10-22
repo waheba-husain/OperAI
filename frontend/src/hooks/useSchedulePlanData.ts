@@ -17,12 +17,14 @@
    ============================================================ */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import type { OrderDTO, PlanResponseDTO } from '../types/dto.ts'
+import type { OrderDTO, PlanGenerateResponseDTO, PlanResponseDTO } from '../types/dto.ts'
 import type { SchedulePlanSummary, ScheduleTaskItem } from '../types/schedulePlan.ts'
 import {
   apiClient as defaultApiClient,
   ApiClient,
   getDefaultConfig,
+  completePlanTask,
+  generatePlan,
   getOrders,
   getPlan,
   ApiError,
@@ -66,6 +68,9 @@ export interface SchedulePlanDataResult {
   readonly isMissingConfig: boolean
   readonly isEmpty: boolean
   readonly isPlanNotFound: boolean
+  readonly isGenerating: boolean
+  readonly generateError: ApiError | ConfigurationError | NetworkError | Error | null
+  readonly generateSuccessMessage: string | null
   readonly targetDate: string
   readonly formattedDate: string
   readonly kitchenName: string
@@ -73,7 +78,14 @@ export interface SchedulePlanDataResult {
   readonly summary: SchedulePlanSummary
   readonly tasks: readonly ScheduleTaskItem[]
   readonly lateOrderIds: readonly string[]
+  readonly isCompletingTask: boolean
+  readonly completingTaskId: string | null
+  readonly completeTaskError: ApiError | ConfigurationError | NetworkError | Error | null
+  readonly completeTaskSuccessMessage: string | null
+  readonly markTaskDone: (taskId: string) => Promise<boolean>
   readonly setTargetDate: (newDate: string) => void
+  readonly generateSchedule: () => Promise<PlanGenerateResponseDTO | null>
+  readonly clearGenerateState: () => void
   readonly refetch: () => Promise<void>
   readonly setMode: (mode: SchedulePlanMode) => void
 }
@@ -97,6 +109,26 @@ export function useSchedulePlanData(options?: UseSchedulePlanDataOptions): Sched
   const [isLoading, setIsLoading] = useState<boolean>(mode === 'live')
   const [error, setError] = useState<ApiError | ConfigurationError | NetworkError | Error | null>(null)
   const [livePayload, setLivePayload] = useState<LivePayload | null>(null)
+
+  // Plan generation state
+  const [isGenerating, setIsGenerating] = useState<boolean>(false)
+  const [generateError, setGenerateError] = useState<ApiError | ConfigurationError | NetworkError | Error | null>(null)
+  const [generateSuccessMessage, setGenerateSuccessMessage] = useState<string | null>(null)
+  const [completingTaskId, setCompletingTaskId] = useState<string | null>(null)
+  const [completeTaskError, setCompleteTaskError] = useState<ApiError | ConfigurationError | NetworkError | Error | null>(null)
+  const [completeTaskSuccessMessage, setCompleteTaskSuccessMessage] = useState<string | null>(null)
+  const [demoCompletedTaskIds, setDemoCompletedTaskIds] = useState<ReadonlySet<string>>(new Set())
+
+  const clearGenerateState = useCallback(() => {
+    setGenerateError(null)
+    setGenerateSuccessMessage(null)
+  }, [])
+
+  const handleSetTargetDate = useCallback((newDate: string) => {
+    setTargetDate(newDate)
+    setGenerateError(null)
+    setGenerateSuccessMessage(null)
+  }, [])
 
   const abortControllerRef = useRef<AbortController | null>(null)
   const requestSeqRef = useRef<number>(0)
@@ -191,6 +223,61 @@ export function useSchedulePlanData(options?: UseSchedulePlanDataOptions): Sched
     }
   }, [mode, targetDate, activeClient])
 
+  const generateSchedule = useCallback(async (): Promise<PlanGenerateResponseDTO | null> => {
+    if (isGenerating) return null
+    setIsGenerating(true)
+    setGenerateError(null)
+    setGenerateSuccessMessage(null)
+
+    try {
+      const res = await generatePlan(
+        { date: targetDate, regenerate: false },
+        { client: activeClient }
+      )
+      setGenerateSuccessMessage(
+        `Schedule v${res.plan_version} generated successfully: ${res.orders_scheduled} orders scheduled, ${res.task_count} tasks created (${res.solver} solver).`
+      )
+      await fetchData()
+      return res
+    } catch (err: unknown) {
+      const errorObj = err instanceof Error ? err : new Error(String(err))
+      setGenerateError(errorObj)
+      return null
+    } finally {
+      setIsGenerating(false)
+    }
+  }, [isGenerating, targetDate, activeClient, fetchData])
+
+  const markTaskDone = useCallback(
+    async (taskId: string): Promise<boolean> => {
+      if (completingTaskId) {
+        return false
+      }
+      setCompletingTaskId(taskId)
+      setCompleteTaskError(null)
+      setCompleteTaskSuccessMessage(null)
+
+      try {
+        if (mode === 'live') {
+          const res = await completePlanTask(taskId, { client: activeClient })
+          setCompleteTaskSuccessMessage(res.message || 'Task marked as done')
+          await fetchData()
+        } else {
+          setDemoCompletedTaskIds((prev) => new Set([...prev, taskId]))
+          setCompleteTaskSuccessMessage('Task marked as done (demo mode)')
+        }
+        return true
+      } catch (err: unknown) {
+        const errorObj = err instanceof Error ? err : new Error(String(err))
+        setCompleteTaskError(errorObj)
+        return false
+      } finally {
+        setCompletingTaskId(null)
+      }
+    },
+    [completingTaskId, mode, activeClient, fetchData]
+  )
+
   useEffect(() => {
     const run = async () => {
       await fetchData()
@@ -218,6 +305,9 @@ export function useSchedulePlanData(options?: UseSchedulePlanDataOptions): Sched
       isMissingConfig: !hasApiKey,
       isEmpty,
       isPlanNotFound: livePayload.isPlanNotFound,
+      isGenerating,
+      generateError,
+      generateSuccessMessage,
       targetDate,
       formattedDate: formatDateIST(targetDate),
       kitchenName: DEMO_SCHEDULE_METADATA.kitchenName,
@@ -225,7 +315,14 @@ export function useSchedulePlanData(options?: UseSchedulePlanDataOptions): Sched
       summary: livePayload.summary,
       tasks: livePayload.tasks,
       lateOrderIds: livePayload.plan?.late_orders ?? [],
-      setTargetDate,
+      isCompletingTask: completingTaskId !== null,
+      completingTaskId,
+      completeTaskError,
+      completeTaskSuccessMessage,
+      markTaskDone,
+      setTargetDate: handleSetTargetDate,
+      generateSchedule,
+      clearGenerateState,
       refetch: fetchData,
       setMode
     }
@@ -233,6 +330,20 @@ export function useSchedulePlanData(options?: UseSchedulePlanDataOptions): Sched
 
   // Demo mode or while loading/error
   const isLiveMode = mode === 'live'
+
+  const demoTasks =
+    demoCompletedTaskIds.size === 0
+      ? DEMO_SCHEDULE_ITEMS
+      : DEMO_SCHEDULE_ITEMS.map((item) =>
+          demoCompletedTaskIds.has(item.id)
+            ? {
+                ...item,
+                status: 'done' as const,
+                statusLabel: 'Done',
+                isLocked: true
+              }
+            : item
+        )
 
   return {
     mode,
@@ -242,14 +353,24 @@ export function useSchedulePlanData(options?: UseSchedulePlanDataOptions): Sched
     isMissingConfig: !hasApiKey,
     isEmpty: false,
     isPlanNotFound: false,
+    isGenerating,
+    generateError,
+    generateSuccessMessage,
     targetDate,
     formattedDate: formatDateIST(targetDate),
     kitchenName: DEMO_SCHEDULE_METADATA.kitchenName,
     planVersion: isLiveMode ? '—' : DEMO_SCHEDULE_SUMMARY.planVersion,
     summary: isLiveMode ? deriveSchedulePlanSummary(null, targetDate) : DEMO_SCHEDULE_SUMMARY,
-    tasks: isLiveMode ? [] : DEMO_SCHEDULE_ITEMS,
+    tasks: isLiveMode ? [] : demoTasks,
     lateOrderIds: isLiveMode ? [] : DEMO_SCHEDULE_PLAN.late_orders,
-    setTargetDate,
+    isCompletingTask: completingTaskId !== null,
+    completingTaskId,
+    completeTaskError,
+    completeTaskSuccessMessage,
+    markTaskDone,
+    setTargetDate: handleSetTargetDate,
+    generateSchedule,
+    clearGenerateState,
     refetch: fetchData,
     setMode
   }

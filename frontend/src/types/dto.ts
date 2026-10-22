@@ -159,6 +159,13 @@ export type OrderExtractResponseDTO =
   | OrderExtractSuccessResponseDTO
   | OrderExtractAmbiguousResponseDTO
 
+/** Response shape for POST /api/orders/{order_id}/complete */
+export interface OrderCompleteResponseDTO {
+  readonly order: OrderDTO
+  readonly already_completed: boolean
+  readonly message: string
+}
+
 /* ── 2. Schedule & Plan Contract (Rest_API_Spec.md §3.7 & §3.8) ─ */
 
 /** Scheduled work block in the kitchen timeline (Rest_API_Spec.md §3.8) */
@@ -193,6 +200,13 @@ export interface PlanGenerateResponseDTO {
   readonly orders_scheduled: number
   readonly task_count: number
   readonly late_orders: readonly string[]
+}
+
+/** Response shape for POST /api/plan/tasks/{task_id}/complete */
+export interface PlanTaskCompleteResponseDTO {
+  readonly task: PlanTaskDTO
+  readonly already_completed: boolean
+  readonly message: string
 }
 
 /* ── 3. Proactive Risk Brief Contract (Rest_API_Spec.md §3.9) ─ */

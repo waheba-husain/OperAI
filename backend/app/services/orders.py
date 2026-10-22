@@ -11,6 +11,7 @@ from app.config import settings
 from app.errors import AppError
 from app.models import Ingredient, MenuItem, Order, OrderItem, ProposedAction
 from app.schemas import (
+    OrderCompleteResponse,
     OrderDraftItemOut,
     OrderDraftOut,
     OrderExtractActionOut,
@@ -24,17 +25,6 @@ from app.services.kitchen import get_kitchen
 from app.services.pricing import as_money
 from app.services.recovery import _fingerprint
 from app.timeutil import IST, day_bounds
-
-from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
-
-from app.config import settings
-from app.errors import AppError
-
-
-from app.services.kitchen import get_kitchen
-from app.services.pricing import as_money
-from app.timeutil import day_bounds
 
 VALID_STATUSES = {
     "new",
@@ -81,27 +71,80 @@ def list_orders(
         query = query.where(Order.status == status)
 
     rows = db.scalars(query).all()
-    data = [
-        OrderOut(
-            id=order.id,
-            customer_name=order.customer_name,
-            channel=order.channel,
-            deadline=order.deadline,
-            status=order.status,
-            total_amount=as_money(order.total_amount),
-            items=[
-                OrderItemOut(
-                    menu_item_id=item.menu_item_id,
-                    name=item.menu_item.name,
-                    quantity=item.quantity,
-                    unit_price=as_money(item.unit_price),
-                )
-                for item in order.items
-            ],
-        )
-        for order in rows
-    ]
+    data = [_order_to_out(order) for order in rows]
     return OrderListResponse(data=data, count=len(data))
+
+
+def _order_to_out(order: Order) -> OrderOut:
+    return OrderOut(
+        id=order.id,
+        customer_name=order.customer_name,
+        channel=order.channel,
+        deadline=order.deadline,
+        status=order.status,
+        total_amount=as_money(order.total_amount),
+        items=[
+            OrderItemOut(
+                menu_item_id=item.menu_item_id,
+                name=item.menu_item.name if item.menu_item else "Unknown",
+                quantity=item.quantity,
+                unit_price=as_money(item.unit_price),
+            )
+            for item in order.items
+        ],
+    )
+
+
+def complete_order(db: Session, *, order_id: UUID) -> OrderCompleteResponse:
+    kitchen = get_kitchen(db)
+    order = db.scalars(
+        select(Order)
+        .where(Order.id == order_id)
+        .options(selectinload(Order.items).selectinload(OrderItem.menu_item))
+    ).first()
+
+    if order is None or order.kitchen_id != kitchen.id:
+        raise AppError(
+            404,
+            "ORDER_NOT_FOUND",
+            f"Order {order_id} not found",
+            {"order_id": str(order_id)},
+        )
+
+    if order.status == "completed":
+        return OrderCompleteResponse(
+            order=_order_to_out(order),
+            already_completed=True,
+            message="Order is already completed",
+        )
+
+    if order.status == "cancelled":
+        raise AppError(
+            422,
+            "INVALID_STATUS_TRANSITION",
+            f"Cannot complete order with status '{order.status}'",
+            {"order_id": str(order_id), "current_status": order.status},
+        )
+
+    if order.status not in ("new", "planned", "in_progress", "delayed", "partial"):
+        raise AppError(
+            422,
+            "INVALID_STATUS_TRANSITION",
+            f"Cannot complete order with status '{order.status}'",
+            {"order_id": str(order_id), "current_status": order.status},
+        )
+
+    order.status = "completed"
+    if hasattr(order, "updated_at"):
+        setattr(order, "updated_at", datetime.now(timezone.utc))
+
+    db.flush()
+
+    return OrderCompleteResponse(
+        order=_order_to_out(order),
+        already_completed=False,
+        message="Order marked as completed",
+    )
 
 
 VALID_CHANNELS = {

@@ -1,5 +1,5 @@
 from datetime import date, datetime, timedelta, timezone
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -9,6 +9,7 @@ from app.models import AuditLog, Kitchen, Order, OrderItem, PlanTask
 from app.schemas import (
     PlanGenerateResponse,
     PlanResponse,
+    PlanTaskCompleteResponse,
     PlanTaskOut,
 )
 from app.services.kitchen import get_kitchen
@@ -349,21 +350,7 @@ def get_plan(db: Session, *, target_date: date) -> PlanResponse:
         if order and t_end > ensure_ist(order.deadline):
             late_order_ids.add(str(order.id))
 
-        task_outs.append(
-            PlanTaskOut(
-                id=t.id,
-                order_id=order_id,
-                order_item_id=t.order_item_id,
-                dish=dish_name,
-                task_type=t.task_type,
-                burner_no=t.burner_no,
-                cook_no=t.cook_no,
-                start_at=t_start,
-                end_at=t_end,
-                status=t.status,
-                locked=t.locked,
-            )
-        )
+        task_outs.append(_task_to_out(t))
 
     max_version = max((t.plan_version for t in tasks), default=kitchen.plan_version)
 
@@ -372,4 +359,81 @@ def get_plan(db: Session, *, target_date: date) -> PlanResponse:
         plan_version=max_version,
         tasks=task_outs,
         late_orders=sorted(list(late_order_ids)),
+    )
+
+
+def _task_to_out(t: PlanTask) -> PlanTaskOut:
+    order = t.order_item.order if t.order_item else None
+    dish_name = (
+        t.order_item.menu_item.name
+        if (t.order_item and t.order_item.menu_item)
+        else "Unknown"
+    )
+    order_id = order.id if order else (t.order_item.order_id if t.order_item else None)
+    return PlanTaskOut(
+        id=t.id,
+        order_id=order_id,
+        order_item_id=t.order_item_id,
+        dish=dish_name,
+        task_type=t.task_type,
+        burner_no=t.burner_no,
+        cook_no=t.cook_no,
+        start_at=ensure_ist(t.start_at),
+        end_at=ensure_ist(t.end_at),
+        status=t.status,
+        locked=t.locked,
+    )
+
+
+def complete_task(db: Session, *, task_id: UUID) -> PlanTaskCompleteResponse:
+    kitchen = get_kitchen(db)
+    task = db.scalars(
+        select(PlanTask)
+        .where(PlanTask.id == task_id)
+        .options(
+            selectinload(PlanTask.order_item).selectinload(OrderItem.menu_item),
+            selectinload(PlanTask.order_item).selectinload(OrderItem.order),
+        )
+    ).first()
+
+    if task is None or task.kitchen_id != kitchen.id:
+        raise AppError(
+            404,
+            "TASK_NOT_FOUND",
+            f"Task {task_id} not found",
+            {"task_id": str(task_id)},
+        )
+
+    if task.status == "done":
+        return PlanTaskCompleteResponse(
+            task=_task_to_out(task),
+            already_completed=True,
+            message="Task is already completed",
+        )
+
+    if task.status == "cancelled":
+        raise AppError(
+            422,
+            "INVALID_STATUS_TRANSITION",
+            f"Cannot complete task with status '{task.status}'",
+            {"task_id": str(task_id), "current_status": task.status},
+        )
+
+    if task.status not in ("scheduled", "in_progress"):
+        raise AppError(
+            422,
+            "INVALID_STATUS_TRANSITION",
+            f"Cannot complete task with status '{task.status}'",
+            {"task_id": str(task_id), "current_status": task.status},
+        )
+
+    task.status = "done"
+    task.locked = True
+
+    db.flush()
+
+    return PlanTaskCompleteResponse(
+        task=_task_to_out(task),
+        already_completed=False,
+        message="Task marked as done",
     )

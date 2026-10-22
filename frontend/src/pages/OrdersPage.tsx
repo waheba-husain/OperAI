@@ -52,6 +52,9 @@ export function OrdersPage({ dataOptions }: OrdersPageProps) {
     sortDirection,
     selectedOrderId,
     selectedOrder,
+    isCompletingOrder,
+    completionError,
+    markOrderCompleted,
     setSearchQuery,
     setStatusFilter,
     setChannelFilter,
@@ -252,6 +255,9 @@ export function OrdersPage({ dataOptions }: OrdersPageProps) {
       <OrderDetailModal
         order={selectedOrder}
         onClose={() => setSelectedOrderId(null)}
+        onMarkCompleted={markOrderCompleted}
+        isCompleting={isCompletingOrder}
+        completionError={completionError}
       />
     </article>
   )

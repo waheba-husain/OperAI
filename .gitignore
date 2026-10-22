@@ -14,3 +14,8 @@ dist/
 .vscode/
 .idea/
 .DS_Store
+
+# Python virtual environments
+.venv/
+.venv312/
+backend/.venv312/

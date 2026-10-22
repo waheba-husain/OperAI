@@ -55,11 +55,19 @@ export function SchedulePlanPage({ dataOptions }: SchedulePlanPageProps) {
     isMissingConfig,
     isEmpty,
     isPlanNotFound,
+    isGenerating,
+    generateError,
+    generateSuccessMessage,
+    generateSchedule,
     targetDate,
     formattedDate,
     planVersion,
     summary,
     tasks,
+    completingTaskId,
+    completeTaskError,
+    completeTaskSuccessMessage,
+    markTaskDone,
     setTargetDate,
     refetch,
     setMode
@@ -318,6 +326,43 @@ export function SchedulePlanPage({ dataOptions }: SchedulePlanPageProps) {
         </div>
       </div>
 
+      {/* ── 2B. Generation Status Banners ────────────────────────── */}
+      {generateSuccessMessage && (
+        <div className="schedule-banner schedule-banner--success" role="status">
+          <span className="schedule-banner__icon">✓</span>
+          <div className="schedule-banner__content">
+            <strong>Schedule Published:</strong> {generateSuccessMessage}
+          </div>
+        </div>
+      )}
+
+      {generateError && (
+        <div className="schedule-banner schedule-banner--error" role="alert">
+          <span className="schedule-banner__icon">⚠</span>
+          <div className="schedule-banner__content">
+            <strong>Schedule Generation Notice:</strong> {generateError.message}
+          </div>
+        </div>
+      )}
+
+      {completeTaskSuccessMessage && (
+        <div className="schedule-banner schedule-banner--success" role="status">
+          <span className="schedule-banner__icon">✓</span>
+          <div className="schedule-banner__content">
+            <strong>Task Action:</strong> {completeTaskSuccessMessage}
+          </div>
+        </div>
+      )}
+
+      {completeTaskError && (
+        <div className="schedule-banner schedule-banner--error" role="alert">
+          <span className="schedule-banner__icon">⚠</span>
+          <div className="schedule-banner__content">
+            <strong>Task Completion Notice:</strong> {completeTaskError.message}
+          </div>
+        </div>
+      )}
+
       {/* ── 3. Summary Ribbon ────────────────────────────────────── */}
       <ScheduleSummaryRibbon summary={summary} />
 
@@ -378,6 +423,9 @@ export function SchedulePlanPage({ dataOptions }: SchedulePlanPageProps) {
           formattedDate={formattedDate}
           onSelectToday={() => setTargetDate(todayStr)}
           onSwitchToDemo={mode === 'live' ? () => setMode('demo') : undefined}
+          onGenerateSchedule={generateSchedule}
+          isGenerating={isGenerating}
+          isLive={isLive}
         />
       ) : filteredTasks.length === 0 ? (
         <div className="schedule-no-results">
@@ -399,7 +447,11 @@ export function SchedulePlanPage({ dataOptions }: SchedulePlanPageProps) {
         <div className="schedule-tasks-grid" role="list" aria-label="Scheduled kitchen preparation tasks">
           {filteredTasks.map((task: ScheduleTaskItem) => (
             <div key={task.id} role="listitem">
-              <ScheduleTaskCard task={task} />
+              <ScheduleTaskCard
+                task={task}
+                onMarkDone={markTaskDone}
+                isCompleting={completingTaskId === task.id}
+              />
             </div>
           ))}
         </div>

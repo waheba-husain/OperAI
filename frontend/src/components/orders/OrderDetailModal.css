@@ -346,6 +346,77 @@
   border-color: var(--color-border-strong);
 }
 
+.order-modal-footer__left {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.order-modal-footer__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.order-modal-error-text {
+  font-size: var(--text-xs);
+  color: var(--color-danger);
+  font-weight: var(--weight-medium);
+}
+
+.order-modal-completed-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--color-success);
+  background: var(--color-success-bg);
+  border: 1px solid var(--color-success);
+  border-radius: var(--radius-md);
+}
+
+.order-modal-complete-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-primary);
+  color: var(--color-text-on-primary);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.order-modal-complete-action-btn:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.order-modal-complete-action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.order-modal-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: modal-spin 0.6s linear infinite;
+}
+
+@keyframes modal-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (max-width: 600px) {
   .order-modal-meta-grid {
     grid-template-columns: 1fr;

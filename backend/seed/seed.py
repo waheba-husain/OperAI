@@ -2,7 +2,7 @@
 Run from backend/:  python seed/seed.py
 """
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal as D
 from pathlib import Path
 
@@ -15,6 +15,15 @@ from app.config import settings  # noqa: E402
 SRC = "simulated"
 IST = timezone(timedelta(hours=5, minutes=30))
 engine = create_engine(settings.database_url)
+
+
+def parse_target_date() -> date:
+    for i, arg in enumerate(sys.argv[1:], start=1):
+        if arg.startswith("--date="):
+            return date.fromisoformat(arg.split("=", 1)[1])
+        if arg == "--date" and i < len(sys.argv) - 1:
+            return date.fromisoformat(sys.argv[i + 1])
+    return datetime.now(IST).date()
 
 # key, name, unit, stock, cost_per_unit, allergens, diet
 INGREDIENTS = [
@@ -76,47 +85,85 @@ HAVING SUM(oi.quantity * r.qty_per_portion) > i.stock_qty
 
 
 def main():
-    with engine.begin() as c:
-        c.execute(text("TRUNCATE kitchens CASCADE"))
+    target_date = parse_target_date()
+    date_str = target_date.isoformat()
+    start_bound = datetime(target_date.year, target_date.month, target_date.day, 0, 0, 0, tzinfo=IST)
+    end_bound = start_bound + timedelta(days=1)
 
+    with engine.begin() as c:
+        # Check if Demo Kitchen already exists to preserve existing kitchen id and configuration
         kid = c.execute(text(
-            "INSERT INTO kitchens (name, burner_count, cook_count, overhead_pct, commission_pct,"
-            " target_margin_pct, plan_version, data_source)"
-            " VALUES ('Demo Kitchen', 3, 2, 12.00, 20.00, 25.00, 1, :s) RETURNING id"
-        ), {"s": SRC}).scalar()
+            "SELECT id FROM kitchens WHERE name = 'Demo Kitchen' ORDER BY created_at ASC LIMIT 1"
+        )).scalar()
+
+        if not kid:
+            kid = c.execute(text(
+                "INSERT INTO kitchens (name, burner_count, cook_count, overhead_pct, commission_pct,"
+                " target_margin_pct, plan_version, data_source)"
+                " VALUES ('Demo Kitchen', 3, 2, 12.00, 20.00, 25.00, 1, :s) RETURNING id"
+            ), {"s": SRC}).scalar()
 
         ing = {}
         for key, name, unit, stock, cost, allergens, diet in INGREDIENTS:
-            ing[key] = c.execute(text(
-                "INSERT INTO ingredients (kitchen_id, name, unit, stock_qty, cost_per_unit,"
-                " allergen_tags, diet_tags, data_source)"
-                " VALUES (:k, :n, :u, :st, :co, CAST(:al AS text[]), CAST(:di AS text[]), :s) RETURNING id"
-            ), {"k": kid, "n": name, "u": unit, "st": D(stock), "co": D(cost),
-                "al": allergens, "di": diet, "s": SRC}).scalar()
+            existing_ing = c.execute(text(
+                "SELECT id FROM ingredients WHERE kitchen_id = :k AND name = :n"
+            ), {"k": kid, "n": name}).scalar()
+            if existing_ing:
+                c.execute(text(
+                    "UPDATE ingredients SET unit = :u, stock_qty = :st, cost_per_unit = :co, "
+                    "allergen_tags = CAST(:al AS text[]), diet_tags = CAST(:di AS text[]), "
+                    "data_source = :s, updated_at = now() WHERE id = :id"
+                ), {"u": unit, "st": D(stock), "co": D(cost), "al": allergens, "di": diet, "s": SRC, "id": existing_ing})
+                ing[key] = existing_ing
+            else:
+                ing[key] = c.execute(text(
+                    "INSERT INTO ingredients (kitchen_id, name, unit, stock_qty, cost_per_unit,"
+                    " allergen_tags, diet_tags, data_source)"
+                    " VALUES (:k, :n, :u, :st, :co, CAST(:al AS text[]), CAST(:di AS text[]), :s) RETURNING id"
+                ), {"k": kid, "n": name, "u": unit, "st": D(stock), "co": D(cost),
+                    "al": allergens, "di": diet, "s": SRC}).scalar()
 
         dish = {}
         for key, name, price, pack, prep, cook, recipe in DISHES:
-            mid = c.execute(text(
-                "INSERT INTO menu_items (kitchen_id, name, price, packaging_cost, prep_minutes,"
-                " cook_minutes, data_source)"
-                " VALUES (:k, :n, :p, :pk, :pr, :ck, :s) RETURNING id"
-            ), {"k": kid, "n": name, "p": D(price), "pk": D(pack), "pr": prep, "ck": cook, "s": SRC}).scalar()
+            existing_mid = c.execute(text(
+                "SELECT id FROM menu_items WHERE kitchen_id = :k AND name = :n"
+            ), {"k": kid, "n": name}).scalar()
+            if existing_mid:
+                c.execute(text(
+                    "UPDATE menu_items SET price = :p, packaging_cost = :pk, prep_minutes = :pr, "
+                    "cook_minutes = :ck, data_source = :s WHERE id = :id"
+                ), {"p": D(price), "pk": D(pack), "pr": prep, "ck": cook, "s": SRC, "id": existing_mid})
+                mid = existing_mid
+            else:
+                mid = c.execute(text(
+                    "INSERT INTO menu_items (kitchen_id, name, price, packaging_cost, prep_minutes,"
+                    " cook_minutes, data_source)"
+                    " VALUES (:k, :n, :p, :pk, :pr, :ck, :s) RETURNING id"
+                ), {"k": kid, "n": name, "p": D(price), "pk": D(pack), "pr": prep, "ck": cook, "s": SRC}).scalar()
             dish[key] = (mid, D(price))
             for ikey, qty in recipe.items():
                 c.execute(text(
                     "INSERT INTO recipe_items (menu_item_id, ingredient_id, qty_per_portion)"
                     " VALUES (:m, :i, :q)"
+                    " ON CONFLICT (menu_item_id, ingredient_id) DO UPDATE SET qty_per_portion = :q"
                 ), {"m": mid, "i": ing[ikey], "q": D(qty)})
 
         c.execute(text(
             "INSERT INTO substitutions (kitchen_id, ingredient_id, substitute_ingredient_id,"
             " ratio, needs_consent, notes)"
             " VALUES (:k, :a, :b, 1.000, true, 'Texture differs; soy allergen added')"
+            " ON CONFLICT (ingredient_id, substitute_ingredient_id) DO NOTHING"
         ), {"k": kid, "a": ing["paneer"], "b": ing["tofu"]})
+
+        # Remove existing simulated orders for target_date and kitchen to prevent duplication
+        c.execute(text(
+            "DELETE FROM orders WHERE kitchen_id = :k AND data_source = :s "
+            "AND deadline >= :start AND deadline < :end"
+        ), {"k": kid, "s": SRC, "start": start_bound, "end": end_bound})
 
         for n, (hhmm, customer, channel, items) in enumerate(ORDERS, start=1):
             h, m = map(int, hhmm.split(":"))
-            deadline = datetime(2026, 10, 17, h, m, tzinfo=IST)
+            deadline = datetime(target_date.year, target_date.month, target_date.day, h, m, tzinfo=IST)
             total = sum(dish[d][1] * q for d, q in items)
             oid = c.execute(text(
                 "INSERT INTO orders (kitchen_id, customer_name, customer_phone, channel, deadline,"
@@ -130,7 +177,7 @@ def main():
                     " VALUES (:o, :m, :q, :p)"
                 ), {"o": oid, "m": dish[d][0], "q": q, "p": dish[d][1]})
 
-        print(f"Seeded kitchen, {len(INGREDIENTS)} ingredients, {len(DISHES)} dishes, {len(ORDERS)} orders.")
+        print(f"Seeded kitchen, {len(INGREDIENTS)} ingredients, {len(DISHES)} dishes, {len(ORDERS)} orders for {date_str}.")
         print("Shortages (stock vs needed):")
         for name, stock, needed in c.execute(text(RISK_SQL)):
             print(f"  {name}: stock {stock}, needed {needed}")
