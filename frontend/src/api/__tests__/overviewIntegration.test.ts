@@ -229,6 +229,7 @@ test('Overview Integration: successful parallel requests adapt to live view mode
   // Verify Briefing adaptation
   const briefing = adaptBriefToAiBriefing(brief, actions.count)
   assert.equal(briefing.statusBadge, 'Attention Required')
+  assert.equal(briefing.recommendedAction.targetPageId, 'shortage-recovery')
   assert.match(briefing.observations[0].text, /Heavy Cream/)
   assert.match(briefing.observations[0].text, /540/)
 
@@ -319,6 +320,7 @@ test('Overview Integration: handles empty operational state honestly (0 orders, 
   }
 
   const cleanBriefing = adaptBriefToAiBriefing(cleanBrief, 0)
+  assert.equal(cleanBriefing.recommendedAction.targetPageId, 'live-operations')
   assert.equal(cleanBriefing.statusBadge, 'All Clear')
   assert.match(cleanBriefing.observations[0].text, /Zero revenue at risk/)
 })

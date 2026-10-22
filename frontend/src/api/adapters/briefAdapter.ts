@@ -109,7 +109,7 @@ export function adaptBriefToAiBriefing(
         ? 'Review generated recovery options and confirm an approval option.'
         : 'Operations pacing on schedule. Monitor live queue for new intake.',
       targetLabel: hasShortage ? 'Review Recovery' : 'Live Operations',
-      targetPageId: hasShortage ? 'actions' : 'live-operations'
+      targetPageId: hasShortage ? 'shortage-recovery' : 'live-operations'
     }
   }
 }

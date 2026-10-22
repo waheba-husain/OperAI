@@ -5,6 +5,8 @@
    clearly labeled as simulated per AGENTS.md rules.
    ============================================================ */
 
+import type { PageId } from './navigation.ts'
+
 export type UrgencyLevel = 'critical' | 'warning' | 'info'
 export type TaskStatus = 'completed' | 'in-progress' | 'upcoming' | 'locked'
 export type TaskPriority = 'critical' | 'high' | 'medium' | 'low'
@@ -38,7 +40,7 @@ export interface AiKitchenBriefing {
   readonly recommendedAction: {
     readonly description: string
     readonly targetLabel: string
-    readonly targetPageId?: string
+    readonly targetPageId?: PageId
   }
 }
 
