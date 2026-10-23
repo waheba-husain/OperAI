@@ -310,7 +310,7 @@ Forecasting or accuracy claims should not be made from simulated history alone.
 
 Built by the OperAI team for the **Amazon Developer Hackathon 2026, Alexa+ track**.
 
-Team members: _add names and roles_
+Team members: Zaara Vakeel, Fariha Asif, Waheba Husain
 
 ---
 
