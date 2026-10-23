@@ -22,12 +22,13 @@ from botocore.exceptions import (
     PartialCredentialsError,
     ReadTimeoutError,
 )
+import json
 from uuid import uuid4
 import httpx
 
 from app.config import settings
 from app.errors import AppError
-from app.ai.tools import get_gemini_tool_declarations
+from app.ai.tools import get_gemini_tool_declarations, get_openai_tool_declarations
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +139,7 @@ def parse_converse_response(response: Any) -> ConverseResult:
 
 
 class BedrockClient:
-    """AI Runtime client supporting Gemini REST API with backward compatibility."""
+    """AI Runtime client supporting Groq and Gemini REST APIs with backward compatibility."""
 
     def __init__(
         self,
@@ -153,10 +154,11 @@ class BedrockClient:
         elif client is not None:
             self.api_key = ""
         else:
-            self.api_key = settings.gemini_api_key
+            self.api_key = settings.groq_api_key or settings.gemini_api_key
 
-        self.model_id = model_id or settings.bedrock_model_id
+        self.groq_model_id = settings.groq_model_id
         self.gemini_model_id = settings.gemini_model_id
+        self.model_id = model_id or settings.bedrock_model_id
         self.region_name = region_name or settings.aws_region
 
     @property
@@ -185,7 +187,7 @@ class BedrockClient:
         additional_model_request_fields: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> ConverseResult:
-        """Invokes the AI model (Gemini REST API or injected client).
+        """Invokes the AI model (Groq OpenAI-compatible API, Gemini REST API, or injected client).
 
         Args:
             messages: List of message objects conforming to Converse API schema.
@@ -262,34 +264,286 @@ class BedrockClient:
 
             return parse_converse_response(raw_response)
 
-        # 2. Gemini REST Provider
+        # 2. Check credentials
         if not self.api_key:
             logger.error("AI API key is missing or not configured")
             raise BedrockUnavailableError("AI credentials are not configured or incomplete.")
 
+        # 3. Provider routing: Gemini if explicit Gemini key or model, otherwise Groq
+        is_gemini = (
+            self.api_key.startswith("AIza")
+            or (self.model_id and self.model_id.startswith("gemini"))
+        )
+
+        if is_gemini:
+            return self._converse_gemini(
+                messages=messages,
+                system=system,
+                inference_config=inference_config,
+                tool_config=tool_config,
+                **kwargs,
+            )
+
+        return self._converse_groq(
+            messages=messages,
+            system=system,
+            inference_config=inference_config,
+            tool_config=tool_config,
+            **kwargs,
+        )
+
+    def _converse_groq(
+        self,
+        messages: list[dict[str, Any]],
+        system: list[dict[str, Any]] | None = None,
+        inference_config: dict[str, Any] | None = None,
+        tool_config: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> ConverseResult:
+        """Invokes Groq OpenAI-compatible Chat Completions API."""
+        groq_messages: list[dict[str, Any]] = []
+
         # Convert system prompt
+        if system:
+            system_text = "\n".join(
+                s["text"] for s in system if isinstance(s, dict) and "text" in s
+            )
+            if system_text.strip():
+                groq_messages.append({"role": "system", "content": system_text})
+
+        # Convert messages
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", [])
+
+            # Check if this was an assistant turn holding raw Groq message format
+            if "_groq_message" in msg:
+                groq_messages.append(msg["_groq_message"])
+                continue
+
+            # Check if this turn contains toolResult blocks
+            tool_results = [
+                item["toolResult"]
+                for item in content
+                if isinstance(item, dict) and "toolResult" in item
+            ]
+            if tool_results:
+                for tr in tool_results:
+                    tool_use_id = tr.get("toolUseId", "")
+                    result_content: Any = ""
+                    tr_content = tr.get("content", [])
+                    for c in tr_content:
+                        if isinstance(c, dict) and "json" in c:
+                            result_content = json.dumps(c["json"])
+                        elif isinstance(c, dict) and "text" in c:
+                            result_content = c["text"]
+                    groq_messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_use_id,
+                        "content": result_content,
+                    })
+                continue
+
+            # Assistant turn with toolUse content blocks (if _groq_message wasn't attached)
+            tool_use_items = [
+                item["toolUse"]
+                for item in content
+                if isinstance(item, dict) and "toolUse" in item
+            ]
+            if tool_use_items and role == "assistant":
+                groq_messages.append({
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": tu.get("toolUseId", f"call_{uuid4().hex[:8]}"),
+                            "type": "function",
+                            "function": {
+                                "name": tu.get("name", ""),
+                                "arguments": json.dumps(tu.get("input", {})),
+                            },
+                        }
+                        for tu in tool_use_items
+                    ],
+                })
+                continue
+
+            # Regular text turn
+            groq_role = "assistant" if role == "assistant" else "user"
+            parts = []
+            if isinstance(content, str):
+                parts.append(content)
+            elif isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and "text" in block:
+                        parts.append(block["text"])
+            text_val = "".join(parts) if parts else ""
+            groq_messages.append({"role": groq_role, "content": text_val})
+
+        groq_model = (
+            self.model_id
+            if (
+                self.model_id
+                and (
+                    self.model_id.startswith("openai/")
+                    or "gpt" in self.model_id
+                    or "llama" in self.model_id
+                    or "groq" in self.model_id
+                )
+            )
+            else self.groq_model_id
+        )
+
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        groq_tools = None
+        if tool_config and "tools" in tool_config:
+            groq_tools = get_openai_tool_declarations()
+
+        payload: dict[str, Any] = {
+            "model": groq_model,
+            "messages": groq_messages,
+        }
+        if groq_tools:
+            payload["tools"] = groq_tools
+            payload["tool_choice"] = "auto"
+
+        if inference_config:
+            if "temperature" in inference_config:
+                payload["temperature"] = inference_config["temperature"]
+            if "maxTokens" in inference_config:
+                payload["max_tokens"] = inference_config["maxTokens"]
+
+        try:
+            with httpx.Client(timeout=30.0) as http_client:
+                resp = http_client.post(url, headers=headers, json=payload)
+        except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.TimeoutException) as exc:
+            logger.error("AI service connection/timeout error: %s", type(exc).__name__)
+            raise BedrockUnavailableError("AI service connection timed out or unreachable.") from exc
+        except httpx.NetworkError as exc:
+            logger.error("AI service network error: %s", type(exc).__name__)
+            raise BedrockUnavailableError("AI service connection timed out or unreachable.") from exc
+        except Exception as exc:
+            logger.error("Unexpected error invoking AI service: %s", type(exc).__name__)
+            raise BedrockUnavailableError("AI service failed unexpectedly.") from exc
+
+        if resp.status_code != 200:
+            err_body = (
+                resp.json().get("error", {})
+                if resp.headers.get("content-type", "").startswith("application/json")
+                else {}
+            )
+            err_code = err_body.get("code") or err_body.get("status") or str(resp.status_code)
+            err_msg = err_body.get("message", "")
+            logger.error("AI API error %s: %s", err_code, err_msg)
+            if resp.status_code in (401, 403):
+                raise BedrockUnavailableError("AI credentials are not configured or invalid.")
+            if resp.status_code == 429:
+                raise BedrockUnavailableError(f"AI service rate limit exceeded ({err_code}).")
+            raise BedrockUnavailableError(f"AI service returned an error ({err_code}).")
+
+        try:
+            res_json = resp.json()
+        except Exception as exc:
+            logger.error("Failed to decode JSON from AI response: %s", type(exc).__name__)
+            raise BedrockResponseError("Malformed response from AI service: invalid JSON.") from exc
+
+        choices = res_json.get("choices", [])
+        if not choices:
+            raise BedrockResponseError("Malformed response from AI service: missing choices.")
+        choice = choices[0]
+        message_obj = choice.get("message", {})
+        tool_calls = message_obj.get("tool_calls") or []
+        text_content = message_obj.get("content") or ""
+
+        tool_use_blocks: list[dict[str, Any]] = []
+        tool_map: dict[str, str] = {}
+
+        for tc in tool_calls:
+            if not isinstance(tc, dict):
+                continue
+            fid = tc.get("id") or f"call_{uuid4().hex[:8]}"
+            fn = tc.get("function", {})
+            fname = fn.get("name", "")
+            raw_args = fn.get("arguments", "{}")
+            if isinstance(raw_args, str):
+                try:
+                    fargs = json.loads(raw_args)
+                except json.JSONDecodeError as exc:
+                    logger.warning("Malformed tool arguments JSON for %s: %s", fname, exc)
+                    fargs = {}
+            elif isinstance(raw_args, dict):
+                fargs = raw_args
+            else:
+                fargs = {}
+
+            tool_use_blocks.append({
+                "name": fname,
+                "toolUseId": fid,
+                "input": fargs,
+            })
+            tool_map[fid] = fname
+
+        if tool_use_blocks:
+            content_blocks = [{"toolUse": tu} for tu in tool_use_blocks]
+            stop_reason = "tool_use"
+        else:
+            content_blocks = [{"text": text_content}]
+            stop_reason = "end_turn"
+
+        assistant_message = {
+            "role": "assistant",
+            "content": content_blocks,
+            "_groq_message": message_obj,
+            "_tool_map": tool_map,
+        }
+
+        usage_meta = res_json.get("usage", {})
+        usage = {
+            "inputTokens": usage_meta.get("prompt_tokens", 0),
+            "outputTokens": usage_meta.get("completion_tokens", 0),
+            "totalTokens": usage_meta.get("total_tokens", 0),
+        }
+
+        return ConverseResult(
+            message=assistant_message,
+            content=content_blocks,
+            text=text_content,
+            stop_reason=stop_reason,
+            usage=usage,
+            raw_response=res_json,
+        )
+
+    def _converse_gemini(
+        self,
+        messages: list[dict[str, Any]],
+        system: list[dict[str, Any]] | None = None,
+        inference_config: dict[str, Any] | None = None,
+        tool_config: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> ConverseResult:
+        """Invokes Gemini REST API as a fallback provider."""
         system_instruction = None
         if system:
             system_text = "\n".join(
-                s["text"]
-                for s in system
-                if isinstance(s, dict) and "text" in s
+                s["text"] for s in system if isinstance(s, dict) and "text" in s
             )
             if system_text.strip():
                 system_instruction = {"parts": [{"text": system_text}]}
 
-        # Convert tool config
         gemini_tools = None
         if tool_config and "tools" in tool_config:
             gemini_tools = [{"function_declarations": get_gemini_tool_declarations()}]
 
-        # Convert conversation messages
         gemini_contents: list[dict[str, Any]] = []
         for msg in messages:
             role = msg.get("role", "user")
             content = msg.get("content", [])
 
-            # Check if this message was an assistant turn holding raw gemini parts (including thoughtSignature)
             if "_gemini_parts" in msg:
                 gemini_contents.append({
                     "role": "model",
@@ -297,7 +551,6 @@ class BedrockClient:
                 })
                 continue
 
-            # Check if this turn contains toolResult blocks
             tool_results = [
                 item["toolResult"]
                 for item in content
@@ -333,7 +586,6 @@ class BedrockClient:
                 gemini_contents.append({"role": "user", "parts": parts})
                 continue
 
-            # Regular text message
             gemini_role = "model" if role == "assistant" else "user"
             parts = []
             if isinstance(content, str):
@@ -392,9 +644,9 @@ class BedrockClient:
         content_obj = cand.get("content", {})
         gemini_parts = content_obj.get("parts", [])
 
-        tool_use_blocks: list[dict[str, Any]] = []
-        text_parts: list[str] = []
-        tool_map: dict[str, str] = {}
+        tool_use_blocks = []
+        text_parts = []
+        tool_map = {}
 
         for part in gemini_parts:
             if isinstance(part, dict) and "functionCall" in part:
@@ -497,7 +749,7 @@ class BedrockClient:
         except (httpx.TimeoutException, httpx.NetworkError) as exc:
             logger.error("Groq extraction connection failed (%s)", type(exc).__name__)
             raise BedrockUnavailableError(
-                "Groq order extraction is unreachable. Check the connection and try again."
+                "Groq order extraction timed out or is unreachable. Check the connection and try again."
             ) from exc
         except Exception as exc:
             logger.error("Unexpected Groq extraction error (%s)", type(exc).__name__)
@@ -525,8 +777,8 @@ class BedrockClient:
             raise BedrockResponseError("Groq returned an invalid response without a completion.")
         message = choices[0].get("message") if isinstance(choices[0], dict) else None
         content = message.get("content") if isinstance(message, dict) else None
-        if not isinstance(content, str) or not content.strip():
-            raise BedrockResponseError("Groq returned an empty extraction response.")
+        if not isinstance(content, str):
+            raise BedrockResponseError("Groq returned an invalid extraction response.")
         return content
 
 

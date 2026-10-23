@@ -120,7 +120,7 @@ def extract_order_with_groq(text: str) -> RawExtractedOrder:
             ),
             system_prompt=SYSTEM_PROMPT,
         )
-        if not raw_text:
+        if not raw_text or not raw_text.strip():
             raise AppError(422, "EXTRACTION_FAILED", "No order could be found in the text")
         return _parse_extracted_json(raw_text)
     except AppError:

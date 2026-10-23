@@ -13,6 +13,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.config import settings
+# Keep tests isolated from the application database configured in the environment.
+settings.database_url = "sqlite://"
+
 from app.db import get_db
 from app.main import app
 from app.models import Base, Ingredient, Kitchen, MenuItem, RecipeItem
