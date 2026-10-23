@@ -131,6 +131,7 @@ class TestOrderExtractionGroqExecution:
                 customer_name="Test",
                 channel="whatsapp",
                 items=[RawExtractedItem(dish="Naan", quantity=2)],
+                confidence=0.9,
             )
 
         monkeypatch.setattr("app.ai.extractor.extract_order_with_groq", mock_groq)

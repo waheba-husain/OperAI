@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from app.errors import AppError
 from app.models import Ingredient, MenuItem
 from app.services.kitchen import get_kitchen
+from app.services.orders import extract_order
 from app.services.pricing_analysis import analyze_price
 from app.services.recovery import propose_recovery
 from app.services.risk import get_risk_brief
@@ -36,6 +37,7 @@ ALLOWED_TOOLS = {
     "get_brief",
     "propose_recovery",
     "analyze_price",
+    "extract_order",
 }
 
 
@@ -161,9 +163,7 @@ BEDROCK_TOOLS: list[dict[str, Any]] = [
     },
 ]
 
-# Preparatory specification for Feature 8 (Order extraction) - omitted from active registry
-# until its backend service and approval applier are implemented.
-PREPARATORY_EXTRACT_ORDER_SPEC: dict[str, Any] = {
+EXTRACT_ORDER_SPEC: dict[str, Any] = {
     "toolSpec": {
         "name": "extract_order",
         "description": (
@@ -188,7 +188,7 @@ PREPARATORY_EXTRACT_ORDER_SPEC: dict[str, Any] = {
 
 def get_tool_specs() -> list[dict[str, Any]]:
     """Returns the list of Bedrock Converse API tool specifications."""
-    return BEDROCK_TOOLS
+    return [*BEDROCK_TOOLS, EXTRACT_ORDER_SPEC]
 
 
 def get_tool_config() -> dict[str, Any]:
@@ -219,7 +219,7 @@ get_groq_tool_declarations = get_openai_tool_declarations
 def get_gemini_tool_declarations() -> list[dict[str, Any]]:
     """Converts tool specs to Gemini function declarations format."""
     declarations = []
-    for spec in BEDROCK_TOOLS:
+    for spec in get_tool_specs():
         ts = spec["toolSpec"]
         input_schema = ts["inputSchema"]["json"]
         props: dict[str, Any] = {}
@@ -410,19 +410,20 @@ def _handle_analyze_price(input_data: dict[str, Any], db: Session) -> dict[str, 
     return result
 
 
-def _handle_extract_order(input_data: dict[str, Any], _db: Session) -> dict[str, Any]:
+def _handle_extract_order(input_data: dict[str, Any], db: Session) -> dict[str, Any]:
     try:
-        ExtractOrderInput(**input_data)
+        parsed_input = ExtractOrderInput(**input_data)
     except ValidationError as exc:
         raise AppError(422, "VALIDATION_ERROR", str(exc)) from exc
 
-    # Feature 8 (Order extraction) is scheduled as a subsequent feature.
-    # As per system rules, order-extraction behavior is not invented when unestablished.
-    raise AppError(
-        501,
-        "NOT_IMPLEMENTED",
-        "Order extraction service is not yet implemented (scheduled for Feature 8).",
-    )
+    result, created = extract_order(db, parsed_input.text)
+    if created:
+        db.commit()
+    output = result.model_dump(mode="json")
+    action = output.get("action")
+    if action:
+        output["option_action_ids"] = [action["id"]]
+    return output
 
 
 def dispatch_tool(name: str, input_params: dict[str, Any], db: Session) -> dict[str, Any]:
@@ -457,6 +458,8 @@ def dispatch_tool(name: str, input_params: dict[str, Any], db: Session) -> dict[
         return _handle_propose_recovery(input_params, db)
     elif name == "analyze_price":
         return _handle_analyze_price(input_params, db)
+    elif name == "extract_order":
+        return _handle_extract_order(input_params, db)
 
     raise AppError(400, "DISALLOWED_TOOL", f"Tool '{name}' is not supported.")
 

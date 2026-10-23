@@ -132,6 +132,10 @@ export interface OrderDTO {
 export type OrderListResponseDTO = ApiListResponseDTO<OrderDTO>
 
 /** Order extraction draft payload returned by POST /api/orders/extract (Rest_API_Spec.md §3.6) */
+export interface OrderExtractRequestDTO {
+  readonly text: string
+}
+
 export interface OrderDraftDTO {
   readonly customer_name: string
   readonly customer_phone?: string

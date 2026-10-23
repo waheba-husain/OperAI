@@ -40,6 +40,8 @@ def _build_response(
         intent = "report_shortage"
     elif tool_used == "analyze_price":
         intent = "analyze_price"
+    elif tool_used == "extract_order":
+        intent = "extract_order"
 
     requires_confirmation = False
     confirm_phrases: list[str] = []
@@ -58,6 +60,15 @@ def _build_response(
             f"confirm option {opt.get('option_number', idx + 1)}"
             for idx, opt in enumerate(options)
         ]
+    elif (
+        tool_used == "extract_order"
+        and tool_result_data
+        and (action := tool_result_data.get("action"))
+        and action.get("status") == "pending"
+    ):
+        requires_confirmation = True
+        confirm_phrases = [f"confirm option {action.get('option_number', 1)}"]
+        response_data = tool_result_data
     elif tool_result_data is not None:
         response_data = tool_result_data
 

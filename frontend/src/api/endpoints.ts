@@ -24,6 +24,8 @@ import type {
   IngredientListResponseDTO,
   MenuListResponseDTO,
   OrderCompleteResponseDTO,
+  OrderExtractRequestDTO,
+  OrderExtractResponseDTO,
   OrderListResponseDTO,
   OrderStatusDTO,
   PlanGenerateResponseDTO,
@@ -72,6 +74,15 @@ export async function completeOrder(
     {},
     { signal: options?.signal }
   )
+}
+
+/** Extract a pasted customer message into a pending order draft (Rest_API_Spec.md §3.6). */
+export async function extractOrder(
+  data: OrderExtractRequestDTO,
+  options?: { signal?: AbortSignal; client?: ApiClient }
+): Promise<OrderExtractResponseDTO> {
+  const client = options?.client ?? defaultClient
+  return client.post<OrderExtractResponseDTO>('/api/orders/extract', data, { signal: options?.signal })
 }
 
 /* ── 2. Daily Plan & Schedule (Rest_API_Spec.md §3.7 & §3.8) ──────── */

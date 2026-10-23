@@ -30,11 +30,10 @@ from app.schemas import (
 class TestBedrockToolSpecs:
     def test_tool_specs_count_and_names(self):
         specs = get_tool_specs()
-        assert len(specs) == 3
+        assert len(specs) == 4
         names = {s["toolSpec"]["name"] for s in specs}
-        assert names == {"get_brief", "propose_recovery", "analyze_price"}
-        assert "extract_order" not in names
-        assert "extract_order" not in ALLOWED_TOOLS
+        assert names == {"get_brief", "propose_recovery", "analyze_price", "extract_order"}
+        assert "extract_order" in ALLOWED_TOOLS
 
 
     def test_tool_spec_converse_format(self):
@@ -323,19 +322,35 @@ class TestProposeRecoveryTool:
         assert exc_info.value.code == "VALIDATION_ERROR"
 
 
-class TestExtractOrderToolOmitted:
-    def test_extract_order_absent_from_active_registry(self):
+class TestExtractOrderTool:
+    def test_extract_order_in_active_registry(self):
         active_names = {s["toolSpec"]["name"] for s in get_tool_specs()}
-        assert "extract_order" not in active_names
-        assert "extract_order" not in ALLOWED_TOOLS
+        assert "extract_order" in active_names
+        assert "extract_order" in ALLOWED_TOOLS
         config_names = {s["toolSpec"]["name"] for s in get_tool_config().get("tools", [])}
-        assert "extract_order" not in config_names
+        assert "extract_order" in config_names
 
-    def test_extract_order_dispatch_rejected(self, db_session):
-        with pytest.raises(AppError) as exc_info:
-            dispatch_tool("extract_order", {"text": "2 paneer biryani"}, db_session)
-        assert exc_info.value.status == 400
-        assert exc_info.value.code == "DISALLOWED_TOOL"
+    def test_extract_order_dispatch_returns_pending_proposal(self, db_session, monkeypatch):
+        from app.ai.extractor import RawExtractedItem, RawExtractedOrder
+        from app.models import ProposedAction
+
+        monkeypatch.setattr(
+            "app.services.orders.extract_order_from_text",
+            lambda _text: RawExtractedOrder(
+                customer_name="Customer D",
+                deadline="2026-10-17T13:00:00+05:30",
+                items=[RawExtractedItem(dish="Paneer Biryani", quantity=2)],
+                confidence=0.9,
+            ),
+        )
+        result = dispatch_tool(
+            "extract_order",
+            {"text": "2 Paneer Biryani for tomorrow at 1pm, Customer D"},
+            db_session,
+        )
+        assert result["action"]["status"] == "pending"
+        assert result["option_action_ids"] == [result["action"]["id"]]
+        assert db_session.query(ProposedAction).filter_by(action_type="order_intake").count() == 1
 
 
 
